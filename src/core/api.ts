@@ -51,11 +51,18 @@ export class TimelimitApi {
   }
 
   async signInByGoogle ({ idToken, locale }: { idToken: string, locale: string }): Promise<string> {
-    const { mailAuthToken } = await this.post<{ mailAuthToken: string }>(
+    const result = await this.post<{ mailAuthToken?: string, mailAddressNotWhitelisted?: boolean, mailServerBlacklisted?: boolean }>(
       '/auth/sign-in-by-google', { idToken, locale },
-      { 404: 'this server has no Google sign-in (needs the parent-console server branch)', 401: 'Google ID token was rejected — sign in with Google again' }
+      {
+        404: 'this server has no Google sign-in (needs the parent-console server branch)',
+        501: 'Google sign-in is switched off on the server: GOOGLE_CLIENT_ID is not set',
+        401: 'Google ID token was rejected — sign in with Google again'
+      }
     )
-    return mailAuthToken
+    if (result.mailAddressNotWhitelisted) throw new ParentConsoleError('server refused the Google account: its mail is not in the server whitelist')
+    if (result.mailServerBlacklisted) throw new ParentConsoleError('server refused the Google account: its mail provider is blacklisted on the server')
+    if (!result.mailAuthToken) throw new ParentConsoleError('server answered without mailAuthToken')
+    return result.mailAuthToken
   }
 
   async signInIntoFamily ({ mailAuthToken, deviceName, model = 'timelimit-parent' }: { mailAuthToken: string, deviceName: string, model?: string }): Promise<SignInResult> {
