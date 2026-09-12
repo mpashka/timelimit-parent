@@ -1,5 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "rootDir": ".", "outDir": "build", "declaration": false },
-  "include": ["src", "test"]
+  "files": ["src/web/format.ts"],
+  "include": ["src", "test"],
+  "exclude": ["src/web"]
 }

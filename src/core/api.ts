@@ -27,7 +27,8 @@ export class TimelimitApi {
   readonly serverUrl: string
   private readonly fetchImpl: typeof fetch
 
-  constructor ({ serverUrl = DEFAULT_SERVER_URL, fetchImpl = globalThis.fetch }: { serverUrl?: string, fetchImpl?: typeof fetch } = {}) {
+  // Browsers throw "Illegal invocation" when window.fetch is called detached from window.
+  constructor ({ serverUrl = DEFAULT_SERVER_URL, fetchImpl = (input, init) => globalThis.fetch(input, init) }: { serverUrl?: string, fetchImpl?: typeof fetch } = {}) {
     this.serverUrl = serverUrl.replace(/\/+$/, '')
     this.fetchImpl = fetchImpl
   }

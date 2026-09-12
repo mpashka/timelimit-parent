@@ -1,7 +1,7 @@
 {
   "name": "timelimit-parent",
   "version": "0.1.0",
-  "description": "Parent console for a TimeLimit sync server: protocol client, CLI and LLM skill",
+  "description": "Parent console for a TimeLimit sync server: protocol client, CLI, web console and LLM skill",
   "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
@@ -15,13 +15,19 @@
     "./core": "./dist/core/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.core.json",
+    "build": "tsc -p tsconfig.json && node scripts/web.mjs build",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.core.json && tsc -p tsconfig.web.json",
     "test": "rm -rf build && tsc -p tsconfig.test.json && node --test \"build/test/**/*.test.js\"",
-    "cli": "npm run build --silent && node dist/cli/main.js"
+    "cli": "npm run build --silent && node dist/cli/main.js",
+    "web": "node scripts/web.mjs dev",
+    "web:mock": "node scripts/web.mjs dev --mock"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
+    "esbuild": "^0.28.2",
     "typescript": "5.9"
+  },
+  "dependencies": {
+    "preact": "^10.29.8"
   }
 }

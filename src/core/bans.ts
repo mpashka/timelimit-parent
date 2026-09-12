@@ -144,6 +144,23 @@ export function removeBanActions (ban: Ban, categoryIds: string[] = ban.category
     .map((ref) => ({ type: 'DELETE_TIMELIMIT_RULE', ruleId: ref.ruleId }))
 }
 
+/**
+ * Deletes `removeRuleIds` and adds `ban` on `categoryIds` as one change: rules being deleted do not count as
+ * already existing, so editing only the categories of a ban keeps its segments. Covers edit, delete and their undo.
+ */
+export function replaceBanActions ({ categories, removeRuleIds, ban, categoryIds }: {
+  categories: CategoryView[], removeRuleIds: string[], ban: BanSpec, categoryIds: string[]
+}): ParentAction[] {
+  const removed = new Set(removeRuleIds)
+  const targets = categories
+    .filter((c) => categoryIds.includes(c.id))
+    .map((c) => ({ ...c, rules: c.rules.filter((r) => !removed.has(r.id)) }))
+  return [...removeRuleIds.map((ruleId): ParentAction => ({ type: 'DELETE_TIMELIMIT_RULE', ruleId })), ...addBanActions(targets, ban)]
+}
+
+export const createdRuleIds = (actions: ParentAction[]): string[] =>
+  actions.flatMap((a) => a.type === 'CREATE_TIMELIMIT_RULE' ? [a.rule.ruleId] : [])
+
 export function isBanActiveAt (ban: BanSpec, dayOfWeek: number, minuteOfDay: number): boolean {
   return banSegments(ban).some((s) => (s.days & (1 << dayOfWeek)) !== 0 && minuteOfDay >= s.start && minuteOfDay <= s.end)
 }

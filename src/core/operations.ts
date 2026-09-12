@@ -17,6 +17,14 @@ export function grantExtraTime ({ state, category, minutes, now }: { state: Fami
   }]
 }
 
+/** Undo of `grantExtraTime`: today's extra time minus what was added, not below zero. */
+export function revokeExtraTime ({ state, category, minutes, now }: { state: FamilyState, category: CategoryView, minutes: number, now: number }): ParentAction[] {
+  const child = requireChild(state, category.base.childId)
+  const day = localTime(now, child.timeZone).dayOfEpoch
+  const current = category.base.extraTimeDay === -1 || category.base.extraTimeDay === day ? category.base.extraTime : 0
+  return [{ type: 'SET_CATEGORY_EXTRA_TIME', categoryId: category.id, newExtraTime: Math.max(current - Math.round(minutes * 60000), 0), day }]
+}
+
 export function allowCategoryUntil (category: CategoryView, until: number): ParentAction[] {
   return [{ type: 'UPDATE_CATEGORY_DISABLE_LIMITS', categoryId: category.id, endTime: Math.max(Math.round(until), 0) }]
 }
@@ -42,8 +50,28 @@ export function unlockChild ({ state, child }: { state: FamilyState, child: User
     .map((c) => ({ type: 'UPDATE_CATEGORY_TEMPORARILY_BLOCKED', categoryId: c.id, blocked: false }))
 }
 
+/** Undo of `lockChild` / `unlockChild`: puts back the temporary blocks of categories as they were in `before`. */
+export function restoreTemporaryBlocks (before: CategoryView[]): ParentAction[] {
+  return before.map((c) => c.base.tempBlocked
+    ? { type: 'UPDATE_CATEGORY_TEMPORARILY_BLOCKED', categoryId: c.id, blocked: true, ...(c.base.tempBlockTime ? { endTime: c.base.tempBlockTime } : {}) }
+    : { type: 'UPDATE_CATEGORY_TEMPORARILY_BLOCKED', categoryId: c.id, blocked: false })
+}
+
 const isDailyLimit = (rule: ServerRule): boolean =>
   rule.maxTime > 0 && rule.start === 0 && rule.end === MINUTE_MAX && rule.e === undefined && rule.session === 0
+
+export const dailyLimitRules = (category: CategoryView): ServerRule[] => category.rules.filter(isDailyLimit)
+
+/** Undo of `setDailyLimit`: replaces the current whole-day limits of the category by copies of `snapshot`. */
+export function restoreDailyLimits ({ category, snapshot }: { category: CategoryView, snapshot: ServerRule[] }): ParentAction[] {
+  return [
+    ...dailyLimitRules(category).map((r): ParentAction => ({ type: 'DELETE_TIMELIMIT_RULE', ruleId: r.id })),
+    ...snapshot.map((r): ParentAction => ({
+      type: 'CREATE_TIMELIMIT_RULE',
+      rule: { ruleId: generateId(), categoryId: category.id, time: r.maxTime, days: r.dayMask, extraTime: r.extraTime, start: r.start, end: r.end, dur: r.session, pause: r.pause, perDay: r.perDay }
+    }))
+  ]
+}
 
 /** Sets (minutes > 0) or removes (minutes = null) the whole-day limit of a category on `days`, keeping other days of existing rules. */
 export function setDailyLimit ({ category, minutes, days = ALL_DAYS }: { category: CategoryView, minutes: number | null, days?: number }): ParentAction[] {
@@ -95,6 +123,14 @@ export function limitApp ({ state, childId, packageName, minutes, title, days = 
     rule: { ruleId: generateId(), categoryId, time: Math.round(minutes * 60000), days, extraTime: false, start: 0, end: MINUTE_MAX, dur: 0, pause: 0, perDay: true }
   })
   return actions
+}
+
+/** Undo of `limitApp`: the app goes back to `previousCategoryId` and the created sub-category is deleted. */
+export function undoLimitApp ({ actions, packageName, previousCategoryId }: { actions: ParentAction[], packageName: string, previousCategoryId: string | null }): ParentAction[] {
+  const created = actions.find((a) => a.type === 'CREATE_CATEGORY')
+  if (!created) throw new ParentConsoleError('these actions did not create a category')
+  const back: ParentAction[] = previousCategoryId ? [{ type: 'ADD_CATEGORY_APPS', categoryId: previousCategoryId, packageNames: [packageName] }] : []
+  return [...back, { type: 'DELETE_CATEGORY', categoryId: created.categoryId }]
 }
 
 export function validateUrlFilter (filter: UrlFilter): void {

@@ -125,6 +125,7 @@ export type ParentAction =
   | { type: 'ADD_USER', userId: string, name: string, userType: 'child', timeZone: string }
   | { type: 'UPDATE_USER_FLAGS', userId: string, modified: number, values: number }
   | { type: 'CREATE_CATEGORY', childId: string, categoryId: string, title: string }
+  | { type: 'DELETE_CATEGORY', categoryId: string }
   | { type: 'UPDATE_CATEGORY_TITLE', categoryId: string, newTitle: string }
   | { type: 'SET_PARENT_CATEGORY', categoryId: string, parentCategory: string }
   | { type: 'UPDATE_CATEGORY_FLAGS', categoryId: string, modified: number, values: number }
@@ -140,6 +141,7 @@ export type ParentAction =
   | { type: 'ADD_CATEGORY_APPS', categoryId: string, packageNames: string[] }
   | { type: 'REMOVE_CATEGORY_APPS', categoryId: string, packageNames: string[] }
   | { type: 'INCREMENT_CATEGORY_EXTRATIME', categoryId: string, addedExtraTime: number, day: number }
+  | { type: 'SET_CATEGORY_EXTRA_TIME', categoryId: string, newExtraTime: number, day: number }
   | { type: 'UPDATE_CATEGORY_DISABLE_LIMITS', categoryId: string, endTime: number }
   | { type: 'SET_USER_DISABLE_LIMITS_UNTIL', childId: string, time: number }
   | { type: 'UPDATE_CATEGORY_TEMPORARILY_BLOCKED', categoryId: string, blocked: boolean, endTime?: number }
