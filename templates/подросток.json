@@ -1,0 +1,64 @@
+{
+  "format": "timelimit-parent/template@1",
+  "name": "подросток",
+  "description": "Подросток: игры 1,5 ч в будни и 3 ч в выходные, видео и соцсети по 1 ч / 2 ч, отбой 22:30 (в выходные 23:30).",
+  "exceptCategories": [
+    "Разрешено"
+  ],
+  "categories": [
+    {
+      "title": "*",
+      "bans": [
+        {
+          "days": "su-th",
+          "from": "22:30",
+          "to": "07:00"
+        },
+        {
+          "days": "fr-sa",
+          "from": "23:30",
+          "to": "09:00"
+        }
+      ]
+    },
+    {
+      "title": "Игры",
+      "limits": [
+        {
+          "days": "mo-fr",
+          "minutes": 90
+        },
+        {
+          "days": "sa-su",
+          "minutes": 180
+        }
+      ]
+    },
+    {
+      "title": "Видео",
+      "limits": [
+        {
+          "days": "mo-fr",
+          "minutes": 60
+        },
+        {
+          "days": "sa-su",
+          "minutes": 120
+        }
+      ]
+    },
+    {
+      "title": "Соцсети",
+      "limits": [
+        {
+          "days": "mo-fr",
+          "minutes": 60
+        },
+        {
+          "days": "sa-su",
+          "minutes": 120
+        }
+      ]
+    }
+  ]
+}

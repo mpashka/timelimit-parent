@@ -16,9 +16,9 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.test.json && tsc -p tsconfig.core.json",
-    "test": "node --test 'test/**/*.test.ts'",
-    "cli": "node src/cli/main.ts"
+    "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.core.json",
+    "test": "rm -rf build && tsc -p tsconfig.test.json && node --test \"build/test/**/*.test.js\"",
+    "cli": "npm run build --silent && node dist/cli/main.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",

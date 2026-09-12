@@ -1,0 +1,61 @@
+{
+  "format": "timelimit-parent/template@1",
+  "name": "школьник-младший",
+  "description": "Младший школьник: игры 45 мин в будни и 1,5 ч в выходные, видео 30/60 мин, соцсети закрыты, отбой 20:30 (в выходные 21:30).",
+  "exceptCategories": [
+    "Разрешено"
+  ],
+  "categories": [
+    {
+      "title": "*",
+      "bans": [
+        {
+          "days": "su-th",
+          "from": "20:30",
+          "to": "07:00"
+        },
+        {
+          "days": "fr-sa",
+          "from": "21:30",
+          "to": "08:30"
+        }
+      ]
+    },
+    {
+      "title": "Игры",
+      "limits": [
+        {
+          "days": "mo-fr",
+          "minutes": 45
+        },
+        {
+          "days": "sa-su",
+          "minutes": 90
+        }
+      ]
+    },
+    {
+      "title": "Видео",
+      "limits": [
+        {
+          "days": "mo-fr",
+          "minutes": 30
+        },
+        {
+          "days": "sa-su",
+          "minutes": 60
+        }
+      ]
+    },
+    {
+      "title": "Соцсети",
+      "bans": [
+        {
+          "days": "all",
+          "from": "00:00",
+          "to": "00:00"
+        }
+      ]
+    }
+  ]
+}

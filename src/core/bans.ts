@@ -122,7 +122,7 @@ export function readLegacyBans (categories: CategoryView[]): Ban[] {
 export function banRule ({ categoryId, segment, hard, ruleId = generateId() }: { categoryId: string, segment: Segment, hard: boolean, ruleId?: string }): ParentAction {
   return {
     type: 'CREATE_TIMELIMIT_RULE',
-    rule: { ruleId, categoryId, time: 0, days: segment.days, extraTime: hard, start: segment.start, end: segment.end, dur: 0, pause: 0, perDay: true }
+    rule: { ruleId, categoryId, time: 0, days: segment.days, extraTime: hard, start: segment.start, end: segment.end, dur: 0, pause: 0, perDay: false }
   }
 }
 

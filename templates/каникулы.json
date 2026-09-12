@@ -1,0 +1,47 @@
+{
+  "format": "timelimit-parent/template@1",
+  "name": "каникулы",
+  "description": "Каникулы: игры 3 ч, видео и соцсети по 2 ч каждый день, отбой 23:00–09:00. Применять отдельно и с --replace: при наложении на школьный шаблон побеждают меньшие лимиты.",
+  "exceptCategories": [
+    "Разрешено"
+  ],
+  "categories": [
+    {
+      "title": "*",
+      "bans": [
+        {
+          "days": "all",
+          "from": "23:00",
+          "to": "09:00"
+        }
+      ]
+    },
+    {
+      "title": "Игры",
+      "limits": [
+        {
+          "days": "all",
+          "minutes": 180
+        }
+      ]
+    },
+    {
+      "title": "Видео",
+      "limits": [
+        {
+          "days": "all",
+          "minutes": 120
+        }
+      ]
+    },
+    {
+      "title": "Соцсети",
+      "limits": [
+        {
+          "days": "all",
+          "minutes": 120
+        }
+      ]
+    }
+  ]
+}

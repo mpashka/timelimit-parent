@@ -64,7 +64,7 @@ export function setDailyLimit ({ category, minutes, days = ALL_DAYS }: { categor
     if (!(minutes > 0)) throw new ParentConsoleError(`limit must be positive minutes or "off", got ${minutes}`)
     actions.push({
       type: 'CREATE_TIMELIMIT_RULE',
-      rule: { ruleId: generateId(), categoryId: category.id, time: Math.round(minutes * 60000), days, extraTime: true, start: 0, end: MINUTE_MAX, dur: 0, pause: 0, perDay: true }
+      rule: { ruleId: generateId(), categoryId: category.id, time: Math.round(minutes * 60000), days, extraTime: false, start: 0, end: MINUTE_MAX, dur: 0, pause: 0, perDay: true }
     })
   }
   return actions
@@ -92,7 +92,7 @@ export function limitApp ({ state, childId, packageName, minutes, title, days = 
   actions.push({ type: 'ADD_CATEGORY_APPS', categoryId, packageNames: [packageName] })
   actions.push({
     type: 'CREATE_TIMELIMIT_RULE',
-    rule: { ruleId: generateId(), categoryId, time: Math.round(minutes * 60000), days, extraTime: true, start: 0, end: MINUTE_MAX, dur: 0, pause: 0, perDay: true }
+    rule: { ruleId: generateId(), categoryId, time: Math.round(minutes * 60000), days, extraTime: false, start: 0, end: MINUTE_MAX, dur: 0, pause: 0, perDay: true }
   })
   return actions
 }

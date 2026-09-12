@@ -11,7 +11,7 @@ import { formatClock, formatDays, parseClock, parseDays } from './time.ts'
 
 export const CONFIG_FORMAT = 'timelimit-parent/config@1'
 export const TEMPLATE_FORMAT = 'timelimit-parent/template@1'
-/** Category title in a template that means every root category of the child. */
+/** Category title in a template that means every root category of the child except `exceptCategories`. */
 export const ALL_ROOTS = '*'
 
 export interface PortableLimit {
@@ -50,6 +50,7 @@ export interface PortableConfig {
   description?: string
   child?: { name: string, timeZone: string, flags: number }
   categories: PortableCategory[]
+  exceptCategories?: string[]
   categoryForUnassignedApps?: string | null
   urlFilter?: UrlFilter
 }
@@ -96,7 +97,7 @@ function toPortableLimit (rule: ServerRule): PortableLimit {
     days: formatDays(rule.dayMask),
     minutes: rule.maxTime / 60000,
     ...(rule.start !== 0 || rule.end !== MINUTE_MAX ? { from: formatClock(rule.start), to: formatClock(rule.end + 1) } : {}),
-    ...(rule.extraTime ? {} : { extraTime: false }),
+    ...(rule.extraTime ? { extraTime: true } : {}),
     ...(rule.perDay ? {} : { perDay: false }),
     ...(rule.session > 0 ? { sessionMinutes: rule.session / 60000, pauseMinutes: rule.pause / 60000 } : {})
   }
@@ -117,7 +118,7 @@ function limitShapes (limit: PortableLimit): RuleShape[] {
   if (!(limit.minutes > 0)) throw new ParentConsoleError(`limit minutes must be positive, got ${limit.minutes}`)
   if (start > end) throw new ParentConsoleError(`limit window ${limit.from}-${limit.to} must not cross midnight`, 'split it into two limits')
   return [{
-    time: Math.round(limit.minutes * 60000), days: parseDays(limit.days), extraTime: limit.extraTime ?? true, start, end,
+    time: Math.round(limit.minutes * 60000), days: parseDays(limit.days), extraTime: limit.extraTime ?? false, start, end,
     dur: Math.round((limit.sessionMinutes ?? 0) * 60000), pause: Math.round((limit.pauseMinutes ?? 0) * 60000), perDay: limit.perDay ?? true
   }]
 }
@@ -127,7 +128,7 @@ function banShapes (ban: PortableBan): RuleShape[] {
   const start = parseClock(ban.from) % 1440
   const end = (parseClock(ban.to) + 1439) % 1440
   return banSegments({ days: parseDays(ban.days), start, end, hard })
-    .map((s) => ({ time: 0, days: s.days, extraTime: hard, start: s.start, end: s.end, dur: 0, pause: 0, perDay: true }))
+    .map((s) => ({ time: 0, days: s.days, extraTime: hard, start: s.start, end: s.end, dur: 0, pause: 0, perDay: false }))
 }
 
 export type ImportTarget = { childId: string } | { newChild: { name: string, timeZone?: string } }
@@ -199,7 +200,8 @@ export function planImport ({ state, target, config, mode = 'merge' }: {
       currentParent.set(categoryId, parentId)
     }
   }
-  const rootIds = [...currentParent.keys()].filter((id) => !currentParent.has(currentParent.get(id)!))
+  const excluded = new Set((config.exceptCategories ?? []).map((title) => idByTitle.get(title.toLowerCase())))
+  const rootIds = [...currentParent.keys()].filter((id) => !currentParent.has(currentParent.get(id)!) && !excluded.has(id))
 
   const desired = new Map<string, Map<string, RuleShape>>()
   const touched = new Set<string>()
@@ -285,7 +287,9 @@ export function planImport ({ state, target, config, mode = 'merge' }: {
 export function overlayConfigs (configs: PortableConfig[]): PortableConfig {
   const categories = new Map<string, PortableCategory>()
   let urlFilter: UrlFilter | undefined
+  const except = new Set<string>()
   for (const config of configs) {
+    for (const title of config.exceptCategories ?? []) except.add(title)
     for (const item of config.categories) {
       const key = item.title.toLowerCase()
       const target = categories.get(key) ?? { title: item.title }
@@ -320,6 +324,7 @@ export function overlayConfigs (configs: PortableConfig[]): PortableConfig {
     format: TEMPLATE_FORMAT,
     name: configs.map((c) => c.name).filter(Boolean).join(' + '),
     categories: [...categories.values()],
+    ...(except.size > 0 ? { exceptCategories: [...except] } : {}),
     ...(urlFilter ? { urlFilter } : {})
   }
 }
