@@ -1,0 +1,27 @@
+{
+  "name": "timelimit-parent",
+  "version": "0.1.0",
+  "description": "Parent console for a TimeLimit sync server: protocol client, CLI and LLM skill",
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "timelimit-parent": "dist/cli/main.js",
+    "tlp": "dist/cli/main.js"
+  },
+  "exports": {
+    "./core": "./dist/core/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json && tsc -p tsconfig.core.json",
+    "test": "node --test 'test/**/*.test.ts'",
+    "cli": "node src/cli/main.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "5.9"
+  }
+}
