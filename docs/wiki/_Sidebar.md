@@ -1,7 +1,0 @@
-- [[Home]]
-- [[Installation]]
-- [[Daily use|Daily-use]]
-- [[Bans and limits|Bans-and-limits]]
-- [[Website filter|Website-filter]]
-- [[CLI and Claude Code skill|CLI-and-Claude-Code-skill]]
-- [[FAQ and limitations|FAQ]]
