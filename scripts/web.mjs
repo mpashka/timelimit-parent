@@ -45,6 +45,11 @@ function copyStatic () {
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' }
 
 let mockDeviceTokenAt = 0
+let mockFamilyWithoutChild = false
+
+function hideChildren (fixture) {
+  fixture.users = { version: 'no-child', data: fixture.users.data.filter((u) => u.type !== 'child') }
+}
 
 function mockApi (path, body) {
   const fixture = JSON.parse(readFileSync(join(root, 'test/fixtures/full-status.json'), 'utf8'))
@@ -52,6 +57,8 @@ function mockApi (path, body) {
   const shift = today - 20710
   for (const item of fixture.usedTimes) for (const t of item.times) t.day += shift
   for (const base of fixture.categoryBase) if (base.extraTimeDay >= 0) base.extraTimeDay += shift
+  fixture.apiLevel = 10
+  if (mockFamilyWithoutChild) hideChildren(fixture)
   switch (path) {
     case '/auth/send-mail-login-code-v2': return { mailLoginToken: 'mock' }
     case '/auth/sign-in-by-mail-code':
@@ -61,19 +68,24 @@ function mockApi (path, body) {
       return { status: body.mailAuthToken === 'mock-new' ? 'without family' : 'with family', mail: 'parent@example.com', canCreateFamily: true, alwaysPro: true }
     case '/parent/create-family':
       console.log('create-family', body.parentName, body.parentPassword.hash.slice(0, 7), body.timeZone)
+      mockFamilyWithoutChild = true
+      hideChildren(fixture)
       return { deviceAuthToken: 'mock-token', ownDeviceId: 'devP01', data: fixture }
-    case '/parent/sign-in-into-family': return { deviceAuthToken: 'mock-token', ownDeviceId: 'devP01', data: fixture }
+    case '/parent/sign-in-into-family':
+      mockFamilyWithoutChild = false
+      return { deviceAuthToken: 'mock-token', ownDeviceId: 'devP01', data: fixture }
     case '/parent/create-add-device-token':
       mockDeviceTokenAt = Date.now()
       return { token: 'apple river stone cloud seven', deviceId: 'devNew1' }
     case '/sync/pull-status': {
       const joined = mockDeviceTokenAt > 0 && Date.now() - mockDeviceTokenAt > 15000
       if (joined) fixture.devices.data.push({ ...fixture.devices.data[0], deviceId: 'devNew1', name: 'Планшет', model: 'mock tablet', currentUserId: '' })
-      if (body.status.users === '') return fixture
+      if (body.status.users !== fixture.users.version) return fixture
       return { apiLevel: fixture.apiLevel, fullVersion: 1, ...(joined ? { devices: { ...fixture.devices, version: `joined-${mockDeviceTokenAt}` } } : {}) }
     }
     case '/sync/push-actions':
       for (const item of body.actions) console.log('push', item.sequenceNumber, item.encodedAction)
+      if (body.actions.some((item) => JSON.parse(item.encodedAction).type === 'ADD_USER')) mockFamilyWithoutChild = false
       return { shouldDoFullSync: false }
     default: return [404, 'unknown mock endpoint']
   }

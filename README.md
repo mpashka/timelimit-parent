@@ -11,6 +11,9 @@ phone browser, a terminal or an LLM agent instead of the parent Android app.
 - `templates/` — composable rule templates (night, school hours, age presets);
 - `skill/SKILL.md` — a [Claude Code](https://claude.com/claude-code) skill driving the CLI.
 
+User guide with screenshots: the [wiki](https://github.com/mpashka/timelimit-parent/wiki) (sources in
+`docs/wiki/`).
+
 The console signs in as one more parent device of the family, so parent actions are sent with
 `integrity: "device"` — no parent password is needed or stored. A mail address without a family
 gets one created from the web console (the parent password is hashed in the browser and only
