@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { ApiError } from '../src/core/errors.ts'
 import { parseDays } from '../src/core/time.ts'
-import { banEndsAt, banLabel, errorText, formatDuration, formatUntil } from '../src/web/format.ts'
+import { banEndsAt, banLabel, errorText, formatCountdown, formatDuration, formatUntil } from '../src/web/format.ts'
 import { moscow } from './helpers.ts'
 
 test('durations read as minutes, hours and hours with padded minutes', () => {
@@ -27,4 +27,8 @@ test('an overnight ban seen in the evening ends tomorrow morning, seen in the mo
 
 test('an unknown device token asks to sign in again', () => {
   assert.equal(errorText(new ApiError({ endpoint: '/sync/pull-status', status: 401, body: '' })).signInAgain, true)
+})
+
+test('countdown shows hours, padded minutes and seconds and stops at zero', () => {
+  assert.deepEqual([3 * 3600000, 3 * 3600000 - 1, 61500, 0, -1000].map(formatCountdown), ['3:00:00', '3:00:00', '0:01:02', '0:00:00', '0:00:00'])
 })

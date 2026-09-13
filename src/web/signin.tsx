@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import type { TimelimitApi } from '../core/api.ts'
+import type { SignInResult } from '../core/api.ts'
+import { hashParentPassword } from '../core/password.ts'
 import { createEmptyState, mergeServerStatus } from '../core/state.ts'
 import { errorText, type ErrorText } from './format.ts'
+import { browserTimeZone, ErrorBox, PasswordField } from './setup.tsx'
 import { type Auth, clearLocal, localStore, writeLocal } from './store.ts'
 import { SubmitButton, useBusy } from './ui.tsx'
 
@@ -20,7 +23,12 @@ declare global {
   }
 }
 
-type Step = { name: 'mail' } | { name: 'code', mail: string, mailLoginToken: string } | { name: 'device', mailAuthToken: string }
+type Step =
+  | { name: 'mail' }
+  | { name: 'code', mail: string, mailLoginToken: string }
+  | { name: 'device', mailAuthToken: string }
+  | { name: 'create', mailAuthToken: string, mail: string }
+  | { name: 'closed', mail: string }
 
 const defaultDeviceName = (): string => {
   const agent = navigator.userAgent
@@ -35,6 +43,25 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
   const [mail, setMail] = useState('')
   const [code, setCode] = useState('')
   const [deviceName, setDeviceName] = useState(defaultDeviceName())
+  const [parentName, setParentName] = useState('')
+  const [password, setPassword] = useState('')
+
+  /** A mail without a family goes to family creation, so a new parent never meets "no family uses this mail". */
+  const afterMailAuth = async (mailAuthToken: string) => {
+    const status = await api.getStatusByMailAuthToken({ mailAuthToken })
+    if (status.status === 'with family') setStep({ name: 'device', mailAuthToken })
+    else if (status.canCreateFamily) setStep({ name: 'create', mailAuthToken, mail: status.mail })
+    else setStep({ name: 'closed', mail: status.mail })
+  }
+
+  const finish = async (result: SignInResult) => {
+    clearLocal()
+    writeLocal('auth', JSON.stringify({ deviceAuthToken: result.deviceAuthToken, ownDeviceId: result.ownDeviceId }))
+    await localStore.set('state', JSON.stringify(mergeServerStatus(createEmptyState(), result.data)))
+    onSignedIn({ deviceAuthToken: result.deviceAuthToken, ownDeviceId: result.ownDeviceId })
+  }
+
+  const restart = () => { setError(null); setCode(''); setStep({ name: 'mail' }) }
 
   const attempt = (work: () => Promise<void>) => (event: Event) => {
     event.preventDefault()
@@ -52,7 +79,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
     setError(null)
     void wrap(async () => {
       try {
-        setStep({ name: 'device', mailAuthToken: await api.signInByGoogle({ idToken, locale: 'ru' }) })
+        await afterMailAuth(await api.signInByGoogle({ idToken, locale: 'ru' }))
       } catch (ex) {
         setError(errorText(ex))
       }
@@ -69,7 +96,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
               const mailLoginToken = await api.sendMailLoginCode({ mail: mail.trim(), locale: 'ru' })
               setStep({ name: 'code', mail: mail.trim(), mailLoginToken })
             })}>
-              <label>Почта, на которую создана семья
+              <label>Почта родителя
                 <input type='email' autocomplete='email' required value={mail} onInput={(e) => setMail(e.currentTarget.value)} />
               </label>
               <SubmitButton phase={phase}>Прислать код</SubmitButton>
@@ -81,37 +108,63 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
       {step.name === 'code'
         ? (
           <form onSubmit={attempt(async () => {
-            setStep({ name: 'device', mailAuthToken: await api.signInByMailCode({ mailLoginToken: step.mailLoginToken, receivedCode: code.trim() }) })
+            await afterMailAuth(await api.signInByMailCode({ mailLoginToken: step.mailLoginToken, receivedCode: code.trim() }))
           })}>
-            <label>Код из письма на {step.mail}
-              <input inputMode='numeric' autocomplete='one-time-code' required value={code} onInput={(e) => setCode(e.currentTarget.value)} />
+            <label>Код из письма на {step.mail} — три слова
+              <input autocapitalize='off' autocomplete='one-time-code' autocorrect='off' spellcheck={false} required value={code} onInput={(e) => setCode(e.currentTarget.value)} />
             </label>
             <SubmitButton phase={phase}>Дальше</SubmitButton>
-            <button type='button' class='link' onClick={() => { setError(null); setCode(''); setStep({ name: 'mail' }) }}>Другая почта</button>
+            <button type='button' class='link' onClick={restart}>Другая почта</button>
           </form>
           )
         : null}
       {step.name === 'device'
         ? (
           <form onSubmit={attempt(async () => {
-            const result = await api.signInIntoFamily({ mailAuthToken: step.mailAuthToken, deviceName: deviceName.trim() || defaultDeviceName() })
-            clearLocal()
-            writeLocal('auth', JSON.stringify({ deviceAuthToken: result.deviceAuthToken, ownDeviceId: result.ownDeviceId }))
-            await localStore.set('state', JSON.stringify(mergeServerStatus(createEmptyState(), result.data)))
-            onSignedIn({ deviceAuthToken: result.deviceAuthToken, ownDeviceId: result.ownDeviceId })
+            await finish(await api.signInIntoFamily({ mailAuthToken: step.mailAuthToken, deviceName: deviceName.trim() || defaultDeviceName() }))
           })}>
             <label>Как назвать пульт в списке устройств семьи
               <input required maxLength={50} value={deviceName} onInput={(e) => setDeviceName(e.currentTarget.value)} />
             </label>
             <SubmitButton phase={phase}>Войти</SubmitButton>
-            <button type='button' class='link' onClick={() => { setError(null); setStep({ name: 'mail' }) }}>Начать заново</button>
+            <button type='button' class='link' onClick={restart}>Начать заново</button>
           </form>
           )
         : null}
-      {error
-        ? <div class='error' role='alert'><div>{error.title}</div>{error.hint ? <div class='muted'>{error.hint}</div> : null}</div>
+      {step.name === 'create'
+        ? (
+          <form onSubmit={attempt(async () => {
+            await finish(await api.createFamily({
+              mailAuthToken: step.mailAuthToken,
+              password: await hashParentPassword(password),
+              parentName: parentName.trim(),
+              deviceName: deviceName.trim() || defaultDeviceName(),
+              timeZone: browserTimeZone()
+            }))
+          })}>
+            <p>На {step.mail} семьи ещё нет — создадим.</p>
+            <label>Ваше имя
+              <input required maxLength={50} autocomplete='given-name' value={parentName} onInput={(e) => setParentName(e.currentTarget.value)} />
+            </label>
+            <PasswordField value={password} onInput={setPassword} />
+            <label>Как назвать пульт в списке устройств семьи
+              <input required maxLength={50} value={deviceName} onInput={(e) => setDeviceName(e.currentTarget.value)} />
+            </label>
+            <SubmitButton phase={phase}>Создать семью</SubmitButton>
+            <button type='button' class='link' onClick={restart}>Другая почта</button>
+          </form>
+          )
         : null}
-      <p class='muted small'>Пульт входит в семью как ещё одно устройство родителя; пароль родителя не нужен. Выход — кнопка «Выйти» наверху.</p>
+      {step.name === 'closed'
+        ? (
+          <>
+            <p>На {step.mail} семьи нет, а создавать новые семьи этот сервер не разрешает.</p>
+            <button type='button' class='link' onClick={restart}>Другая почта</button>
+          </>
+          )
+        : null}
+      <ErrorBox error={error} />
+      <p class='muted small'>Нет семьи — пульт создаст её. Есть — войдёт в неё ещё одним устройством родителя, без пароля. Выход — кнопка «Выйти» наверху.</p>
       <p class='muted small'>timelimit-parent, AGPL-3.0.</p>
     </main>
   )

@@ -72,9 +72,10 @@ export function ActionButton ({ work, class: className = '', children, disabled 
   )
 }
 
-export function SubmitButton ({ phase, children, disabled }: { phase: 'idle' | 'pressed' | 'waiting', children: ComponentChildren, disabled?: boolean }) {
+/** Submits its form, or runs `onClick` when used outside of one. */
+export function SubmitButton ({ phase, children, disabled, onClick }: { phase: 'idle' | 'pressed' | 'waiting', children: ComponentChildren, disabled?: boolean, onClick?: () => void }) {
   return (
-    <button type='submit' class={`primary ${phase !== 'idle' ? 'pressed' : ''}`} disabled={disabled || phase !== 'idle'}>
+    <button type={onClick ? 'button' : 'submit'} onClick={onClick} class={`primary ${phase !== 'idle' ? 'pressed' : ''}`} disabled={disabled || phase !== 'idle'}>
       {phase === 'waiting' ? <span class='spinner' aria-hidden='true' /> : null}
       {children}
     </button>

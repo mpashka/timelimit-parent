@@ -18,6 +18,13 @@ export function formatDuration (ms: number): string {
   return m === 0 ? `${h} ч` : `${h} ч ${String(m).padStart(2, '0')} мин`
 }
 
+/** `2:59:07` for a running countdown; zero when it is over. */
+export function formatCountdown (ms: number): string {
+  const total = Math.max(Math.ceil(ms / 1000), 0)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${Math.floor(total / 3600)}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`
+}
+
 export function formatDaysRu (mask: number): string {
   if (mask === ALL_DAYS) return 'пн–вс'
   const parts: string[] = []

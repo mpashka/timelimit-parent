@@ -12,7 +12,10 @@ phone browser, a terminal or an LLM agent instead of the parent Android app.
 - `skill/SKILL.md` — a [Claude Code](https://claude.com/claude-code) skill driving the CLI.
 
 The console signs in as one more parent device of the family, so parent actions are sent with
-`integrity: "device"` — no parent password is needed or stored.
+`integrity: "device"` — no parent password is needed or stored. A mail address without a family
+gets one created from the web console (the parent password is hashed in the browser and only
+unlocks parent mode on the child's device); the console then adds a child and shows the code that
+links the child's device, so the parent Android app is not needed at all.
 
 ## Requirements
 
@@ -27,6 +30,7 @@ The console signs in as one more parent device of the family, so parent actions 
 ```bash
 npm install
 npm test               # hermetic, no network
+TIMELIMIT_E2E_SERVER_DIR=../timelimit-server npm run test:e2e   # against a built local server, see below
 npm run typecheck
 npm run build          # dist/ (CLI) and dist/web/ (web console)
 node dist/cli/main.js --help
@@ -41,6 +45,12 @@ default points to the author's own server, so set yours.
 The web console must be served from the same origin as the sync server (the server sends CORS
 headers only for `/admin`), e.g. `dist/web/` under `/console/` — not `/parent/`, which is a server
 API path. Asset paths are relative. `GOOGLE_CLIENT_ID=... npm run build` enables Google sign-in.
+
+`npm run test:e2e` starts `node build/index.js` from `TIMELIMIT_E2E_SERVER_DIR` (a timelimit-server
+checkout built with `npm ci && npm run build:json && npx tsc`) with SQLite in a temporary directory
+and `NODE_ENV=development`, reads login codes from its output and walks the parent workflow: create
+family, add child, categories, bans, limits, grants, lock, URL filter, export/import, add-device code.
+It is slow-ish (≈ 5 s) and needs the server, so it is not part of `npm test`.
 
 ## Security: the device token
 
@@ -62,7 +72,8 @@ AGPL-3.0, see [LICENSE](LICENSE). Protocol types are derived from
 ## По-русски
 
 Пульт родителя для сервера синхронизации TimeLimit: веб-консоль для телефона, CLI и навык для
-Claude Code. Консоль входит в семью как ещё одно родительское устройство, пароль родителя не нужен.
+Claude Code. Консоль входит в семью как ещё одно родительское устройство, пароль родителя не нужен;
+на почту без семьи она создаёт семью, добавляет ребёнка и показывает код для детского устройства.
 Фильтр сайтов и вход через Google требуют доработок сервера, которых пока нет в апстриме. Токен
 устройства — секрет: CLI берёт его из переменной окружения или из команды `tokenCommand`, на диск
 не пишет.

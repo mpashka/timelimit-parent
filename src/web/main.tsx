@@ -7,6 +7,7 @@ import { errorText } from './format.ts'
 import { History } from './history.tsx'
 import { Home } from './home.tsx'
 import { CategoryDetails, Limits } from './limits.tsx'
+import { AddChildForm, AddDevice } from './setup.tsx'
 import { SignIn } from './signin.tsx'
 import { Sites } from './sites.tsx'
 import { type Auth, clearLocal, Connection, createApi, loadWebConfig, readAuth, readLocal, type WebConfig, writeLocal } from './store.ts'
@@ -64,13 +65,16 @@ function Console ({ api, auth, onSignOut }: { api: TimelimitApi, auth: Auth, onS
     setToast({ id: ++toastId.current, kind: 'error', text: text.title, hint: text.hint, signInAgain: text.signInAgain ? onSignOut : undefined })
   }
 
-  const refresh = async () => {
+  const refresh = async (): Promise<FamilyState | null> => {
     try {
-      applyState(await connection.refresh())
+      const fresh = await connection.refresh()
+      applyState(fresh)
+      return fresh
     } catch (ex) {
       const text = errorText(ex)
       if (text.signInAgain) showError(ex)
       setSyncProblem(text.title)
+      return null
     }
   }
 
@@ -131,15 +135,16 @@ function Console ({ api, auth, onSignOut }: { api: TimelimitApi, auth: Auth, onS
   const child = kids.find((c) => c.id === childId) ?? kids[0]
   if (!child) {
     return (
-      <main class='page'>
-        <p>В семье нет детей. Добавьте ребёнка в приложении TimeLimit — пульт покажет его сам.</p>
+      <main class='page signin'>
+        <AddChildForm run={run} onAdded={(id) => { writeLocal('child', id); setChildId(id) }} />
         <button type='button' class='link' onClick={onSignOut}>Выйти</button>
+        <Toast toast={toast} close={() => setToast(null)} />
       </main>
     )
   }
 
   const [requested, argument] = route.split('/')
-  const screen = ['bans', 'limits', 'history', 'sites', 'category'].includes(requested) ? requested : ''
+  const screen = ['bans', 'limits', 'history', 'sites', 'category', 'device'].includes(requested) ? requested : ''
   const context: AppContext = { state, child, now, pending, run, showError }
   const signOut = () => {
     if (confirm('Выйти из пульта? Для входа снова понадобится код из письма.')) onSignOut()
@@ -171,6 +176,7 @@ function Console ({ api, auth, onSignOut }: { api: TimelimitApi, auth: Auth, onS
         {screen === 'history' ? <History /> : null}
         {screen === 'sites' ? <Sites /> : null}
         {screen === 'category' ? <CategoryDetails categoryId={argument ?? ''} /> : null}
+        {screen === 'device' ? <AddDevice createToken={() => connection.createAddDeviceToken()} refresh={refresh} serverUrl={api.serverUrl} /> : null}
       </main>
       <Toast toast={toast} close={() => setToast(null)} />
       <nav class='tabs'>

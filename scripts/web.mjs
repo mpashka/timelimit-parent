@@ -44,6 +44,8 @@ function copyStatic () {
 
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' }
 
+let mockDeviceTokenAt = 0
+
 function mockApi (path, body) {
   const fixture = JSON.parse(readFileSync(join(root, 'test/fixtures/full-status.json'), 'utf8'))
   const today = Math.floor((Date.now() + 3 * 3600000) / 86400000)
@@ -52,9 +54,24 @@ function mockApi (path, body) {
   for (const base of fixture.categoryBase) if (base.extraTimeDay >= 0) base.extraTimeDay += shift
   switch (path) {
     case '/auth/send-mail-login-code-v2': return { mailLoginToken: 'mock' }
-    case '/auth/sign-in-by-mail-code': return body.receivedCode === '000' ? [403, 'wrong code'] : { mailAuthToken: 'mock' }
+    case '/auth/sign-in-by-mail-code':
+      if (body.receivedCode === '000') return [403, 'wrong code']
+      return { mailAuthToken: body.receivedCode === 'new' ? 'mock-new' : 'mock' }
+    case '/parent/get-status-by-mail-address':
+      return { status: body.mailAuthToken === 'mock-new' ? 'without family' : 'with family', mail: 'parent@example.com', canCreateFamily: true, alwaysPro: true }
+    case '/parent/create-family':
+      console.log('create-family', body.parentName, body.parentPassword.hash.slice(0, 7), body.timeZone)
+      return { deviceAuthToken: 'mock-token', ownDeviceId: 'devP01', data: fixture }
     case '/parent/sign-in-into-family': return { deviceAuthToken: 'mock-token', ownDeviceId: 'devP01', data: fixture }
-    case '/sync/pull-status': return body.status.users === '' ? fixture : { apiLevel: fixture.apiLevel, fullVersion: 1 }
+    case '/parent/create-add-device-token':
+      mockDeviceTokenAt = Date.now()
+      return { token: 'apple river stone cloud seven', deviceId: 'devNew1' }
+    case '/sync/pull-status': {
+      const joined = mockDeviceTokenAt > 0 && Date.now() - mockDeviceTokenAt > 15000
+      if (joined) fixture.devices.data.push({ ...fixture.devices.data[0], deviceId: 'devNew1', name: 'Планшет', model: 'mock tablet', currentUserId: '' })
+      if (body.status.users === '') return fixture
+      return { apiLevel: fixture.apiLevel, fullVersion: 1, ...(joined ? { devices: { ...fixture.devices, version: `joined-${mockDeviceTokenAt}` } } : {}) }
+    }
     case '/sync/push-actions':
       for (const item of body.actions) console.log('push', item.sequenceNumber, item.encodedAction)
       return { shouldDoFullSync: false }

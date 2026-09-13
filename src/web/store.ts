@@ -1,4 +1,4 @@
-import { TimelimitApi } from '../core/api.ts'
+import { type AddDeviceToken, TimelimitApi } from '../core/api.ts'
 import type { ParentAction } from '../core/protocol.ts'
 import { type KeyValueStorage, ParentSession } from '../core/session.ts'
 import type { FamilyState } from '../core/state.ts'
@@ -64,6 +64,10 @@ export class Connection {
 
   async push (actions: ParentAction[]): Promise<FamilyState> {
     return (await this.serial(() => this.session.push(actions))).state
+  }
+
+  createAddDeviceToken (): Promise<AddDeviceToken> {
+    return this.serial(() => this.session.createAddDeviceToken())
   }
 
   private serial<T> (work: () => Promise<T>): Promise<T> {

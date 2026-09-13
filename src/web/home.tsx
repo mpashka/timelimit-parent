@@ -18,16 +18,39 @@ const categoryIn = (state: FamilyState, childId: string, id: string) => childCat
 export function Home () {
   const { state, child, now } = useApp()
   const overview = childOverview(state, child.id, now)
+  const devices = state.devices.data.filter((d) => d.currentUserId === child.id)
   return (
     <>
+      {devices.length === 0 ? <ChildDevices /> : null}
       <ChildActions overview={overview} />
       <section class='list'>
         {overview.categories.map((category) => <CategoryRow key={category.id} category={category} overview={overview} />)}
       </section>
+      {devices.length > 0 ? <ChildDevices /> : null}
       {overview.unassignedApps === null
         ? <p class='muted small'>Новые приложения без категории здесь не видны: сервер отдаёт список установленных только зашифрованным.</p>
         : null}
     </>
+  )
+}
+
+/** Devices of the child and devices that joined but have no user yet; the entry to connecting another one. */
+function ChildDevices () {
+  const { state, child } = useApp()
+  const users = new Set(state.users.data.map((u) => u.id))
+  const own = state.devices.data.filter((d) => d.currentUserId === child.id)
+  const unassigned = state.devices.data.filter((d) => !users.has(d.currentUserId))
+  return (
+    <section class='card'>
+      {own.length === 0
+        ? <p><b>Детское устройство ещё не подключено</b> — пока ограничивать нечего.</p>
+        : <h2>Устройства: {child.name}</h2>}
+      {own.length > 0 ? <ul class='plain'>{own.map((d) => <li key={d.deviceId}>{d.name} <span class='muted small'>{d.model}</span></li>)}</ul> : null}
+      {unassigned.length > 0
+        ? <p class='muted small'>Подключены, но пользователь не выбран: {unassigned.map((d) => `«${d.name}»`).join(', ')} — выберите «{child.name}» на самом устройстве.</p>
+        : null}
+      <button type='button' class={own.length === 0 ? 'primary wide' : 'wide'} onClick={() => { location.hash = '#/device' }}>Подключить устройство</button>
+    </section>
   )
 }
 
