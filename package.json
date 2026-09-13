@@ -18,6 +18,7 @@
     "build": "tsc -p tsconfig.json && node scripts/web.mjs build",
     "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.core.json && tsc -p tsconfig.web.json",
     "test": "rm -rf build && tsc -p tsconfig.test.json && node --test \"build/test/**/*.test.js\"",
+    "test:e2e": "rm -rf build && tsc -p tsconfig.test.json && node --test --test-concurrency=1 build/test/e2e/server.e2e.js",
     "cli": "npm run build --silent && node dist/cli/main.js",
     "web": "node scripts/web.mjs dev",
     "web:mock": "node scripts/web.mjs dev --mock"
@@ -28,6 +29,7 @@
     "typescript": "5.9"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "preact": "^10.29.8"
   }
 }

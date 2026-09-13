@@ -1,4 +1,5 @@
 import { ApiError, ParentConsoleError } from './errors.ts'
+import type { ParentPassword } from './password.ts'
 import type { ClientDataStatus, ServerDataStatus } from './protocol.ts'
 
 // @tag:parent-console
@@ -18,6 +19,21 @@ export interface SignInResult {
   ownDeviceId: string
   data: ServerDataStatus
 }
+
+export interface MailStatus {
+  status: 'with family' | 'without family'
+  mail: string
+  canCreateFamily: boolean
+  alwaysPro: boolean
+}
+
+export interface AddDeviceToken {
+  token: string
+  deviceId: string
+}
+
+/** Server worker `delete-old-tokens` removes add-device tokens and mail auth tokens older than this. */
+export const TOKEN_LIFETIME_MS = 3 * 60 * 60 * 1000
 
 type StatusHints = Record<number, string>
 
@@ -70,7 +86,33 @@ export class TimelimitApi {
     return this.post<SignInResult>(
       '/parent/sign-in-into-family',
       { mailAuthToken, parentDevice: { model }, deviceName, clientLevel: CLIENT_LEVEL },
-      { 409: 'no family uses this mail address — create the family in the TimeLimit app first', 401: 'mail authentication expired — log in again' }
+      { 409: 'no family uses this mail address — create the family first', 401: 'mail authentication expired — log in again' }
+    )
+  }
+
+  async getStatusByMailAuthToken ({ mailAuthToken }: { mailAuthToken: string }): Promise<MailStatus> {
+    return this.post<MailStatus>('/parent/get-status-by-mail-address', { mailAuthToken }, { 401: 'mail authentication expired — log in again' })
+  }
+
+  async createFamily ({ mailAuthToken, password, parentName, deviceName, timeZone, model = 'timelimit-parent' }: {
+    mailAuthToken: string, password: ParentPassword, parentName: string, deviceName: string, timeZone: string, model?: string
+  }): Promise<SignInResult> {
+    return this.post<SignInResult>(
+      '/parent/create-family',
+      { mailAuthToken, parentPassword: password, parentDevice: { model }, deviceName, timeZone, parentName, clientLevel: CLIENT_LEVEL },
+      {
+        409: 'this mail address already has a family — sign in instead',
+        403: 'the server does not allow new families (DISABLE_SIGNUP)',
+        401: 'mail authentication expired or was already used — log in again'
+      }
+    )
+  }
+
+  async createAddDeviceToken ({ deviceAuthToken, parentId }: { deviceAuthToken: string, parentId: string }): Promise<AddDeviceToken> {
+    return this.post<AddDeviceToken>(
+      '/parent/create-add-device-token',
+      { deviceAuthToken, parentId, parentPasswordSecondHash: 'device' },
+      { 401: unauthorizedHint }
     )
   }
 

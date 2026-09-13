@@ -1,4 +1,4 @@
-import type { PushActionItem, TimelimitApi } from './api.ts'
+import type { AddDeviceToken, PushActionItem, TimelimitApi } from './api.ts'
 import { ParentConsoleError } from './errors.ts'
 import type { ParentAction } from './protocol.ts'
 import { createEmptyState, type FamilyState, mergeServerStatus, toClientStatus } from './state.ts'
@@ -97,6 +97,12 @@ export class ParentSession {
       pushed += chunk.length
     }
     return { pushed, state: await this.sync() }
+  }
+
+  /** Five words the child's device enters to join the family; the server keeps only the newest token per family. */
+  async createAddDeviceToken (): Promise<AddDeviceToken> {
+    const parentId = this.parentUserId(await this.sync())
+    return this.api.createAddDeviceToken({ deviceAuthToken: this.deviceAuthToken, parentId })
   }
 
   private async nextSequenceNumber (): Promise<number> {

@@ -6,6 +6,24 @@ import { localTime } from './time.ts'
 
 // @tag:parent-console
 
+export const DEFAULT_CHILD_CATEGORIES = ['Разрешено', 'Игры']
+
+/** A child with the two categories the Android app creates (`AddUserModel`), so the child's device has somewhere to put apps. */
+export function addChild ({ name, timeZone, categoryTitles = DEFAULT_CHILD_CATEGORIES }: { name: string, timeZone: string, categoryTitles?: string[] }): { childId: string, actions: ParentAction[] } {
+  const trimmed = name.trim()
+  if (trimmed === '') throw new ParentConsoleError('the child needs a name')
+  const childId = generateId()
+  const categoryIds = categoryTitles.map(() => generateId())
+  return {
+    childId,
+    actions: [
+      { type: 'ADD_USER', userId: childId, name: trimmed, userType: 'child', timeZone },
+      ...categoryTitles.map((title, i): ParentAction => ({ type: 'CREATE_CATEGORY', childId, categoryId: categoryIds[i], title })),
+      { type: 'UPDATE_CATEGORY_SORTING', categoryIds }
+    ]
+  }
+}
+
 export function grantExtraTime ({ state, category, minutes, now }: { state: FamilyState, category: CategoryView, minutes: number, now: number }): ParentAction[] {
   if (!(minutes > 0)) throw new ParentConsoleError(`extra time must be positive, got ${minutes}`)
   const child = requireChild(state, category.base.childId)
