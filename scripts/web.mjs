@@ -16,7 +16,8 @@ const { values: options, positionals } = parseArgs({
   options: {
     server: { type: 'string', default: process.env.TIMELIMIT_SERVER ?? 'https://child-time.pasha-home.ru' },
     mock: { type: 'boolean' },
-    port: { type: 'string', default: '5173' },
+    // Shared registry of development ports; 5173 is taken by another project's vite.
+    port: { type: 'string', default: '5180' },
     base: { type: 'string', default: '/console/' }
   }
 })
@@ -126,6 +127,13 @@ async function serve () {
       res.writeHead(status, { 'content-type': status === 200 ? 'application/json' : 'text/plain' })
       res.end(status === 200 ? JSON.stringify(payload) : payload)
     })
+  }).on('error', (ex) => {
+    // Never fall back to a neighbouring port: a phone forwarding this one would silently reach the other server.
+    const why = ex.code === 'EADDRINUSE'
+      ? `port ${options.port} is already taken — stop whatever listens on it (ss -ltnp | grep :${options.port}), or pass --port with a number free in the development port registry`
+      : ex.message
+    console.error(`cannot serve the web console: ${why}`)
+    process.exit(1)
   }).listen(Number(options.port), '127.0.0.1', () => {
     console.log(`web console: http://127.0.0.1:${options.port}${base} — API ${options.mock ? 'from the test fixture' : `proxied to ${options.server}`}`)
   })
@@ -137,6 +145,6 @@ if (positionals[0] === 'build') {
 } else if (positionals[0] === 'dev') {
   await serve()
 } else {
-  console.error('usage: node scripts/web.mjs build | dev [--server URL | --mock] [--port 5173] [--base /console/]')
+  console.error('usage: node scripts/web.mjs build | dev [--server URL | --mock] [--port 5180] [--base /console/]')
   process.exitCode = 1
 }

@@ -38,7 +38,7 @@ npm run typecheck
 npm run build          # dist/ (CLI) and dist/web/ (web console)
 node dist/cli/main.js --help
 node dist/cli/main.js login --server https://your-server
-npm run web:mock       # web console on http://127.0.0.1:5173/console/ with a fake API
+npm run web:mock       # web console on http://127.0.0.1:5180/console/ with a fake API
 npm run web -- --server https://your-server   # same, API proxied to a real server
 ```
 
