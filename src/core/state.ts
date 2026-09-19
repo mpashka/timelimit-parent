@@ -116,3 +116,13 @@ export function childCategories (state: FamilyState, childId: string): CategoryV
 }
 
 export const children = (state: FamilyState): User[] => state.users.data.filter((u) => u.type === 'child')
+
+export const parents = (state: FamilyState): User[] => state.users.data.filter((u) => u.type === 'parent')
+
+/** Whose parent account this client acts as: the user signed in on its own device, or the only parent of the family. */
+export function findParentOfDevice (state: FamilyState, ownDeviceId?: string): User | undefined {
+  const candidates = parents(state)
+  if (!ownDeviceId) return candidates.length === 1 ? candidates[0] : undefined
+  const device = state.devices.data.find((d) => d.deviceId === ownDeviceId)
+  return device ? candidates.find((p) => p.id === device.currentUserId) : undefined
+}

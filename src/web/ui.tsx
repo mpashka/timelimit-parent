@@ -26,6 +26,28 @@ export interface AppContext {
 export const App = createContext<AppContext>(null as unknown as AppContext)
 export const useApp = (): AppContext => useContext(App)
 
+/** The host is what tells two servers apart; the scheme and path are the same everywhere. */
+export function serverLabel (serverUrl: string): string {
+  try {
+    return new URL(serverUrl).host
+  } catch {
+    return serverUrl
+  }
+}
+
+/** Under whom and where the console acts — the two things a parent cannot check anywhere else. */
+export function Account ({ parent, serverUrl }: { parent: User | undefined, serverUrl: string }) {
+  return (
+    <div class='muted small account'>
+      {parent
+        ? <span>{parent.name}{parent.mail ? ` · ${parent.mail}` : ''}</span>
+        : <span>под кем вход — неизвестно, войдите заново</span>}
+      {' · '}
+      <span>{serverLabel(serverUrl)}</span>
+    </div>
+  )
+}
+
 /** Immediate pressed state; the wait indicator only if the work outlives WAIT_INDICATOR_DELAY_MS. */
 export function useBusy (): [phase: 'idle' | 'pressed' | 'waiting', wrap: (work: () => Promise<void>) => Promise<void>] {
   const [phase, setPhase] = useState<'idle' | 'pressed' | 'waiting'>('idle')

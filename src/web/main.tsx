@@ -1,7 +1,7 @@
 import { render } from 'preact'
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { TimelimitApi } from '../core/api.ts'
-import { children, type FamilyState } from '../core/state.ts'
+import { children, type FamilyState, findParentOfDevice } from '../core/state.ts'
 import { Bans } from './bans.tsx'
 import { errorText } from './format.ts'
 import { History } from './history.tsx'
@@ -11,7 +11,7 @@ import { AddChildForm, AddDevice } from './setup.tsx'
 import { SignIn } from './signin.tsx'
 import { Sites } from './sites.tsx'
 import { type Auth, clearLocal, Connection, createApi, loadWebConfig, readAuth, readLocal, type WebConfig, writeLocal } from './store.ts'
-import { App, type AppContext, Toast, type ToastMessage, WAIT_INDICATOR_DELAY_MS, type Work } from './ui.tsx'
+import { Account, App, type AppContext, Toast, type ToastMessage, WAIT_INDICATOR_DELAY_MS, type Work } from './ui.tsx'
 
 // @tag:parent-console
 
@@ -146,23 +146,27 @@ function Console ({ api, auth, onSignOut }: { api: TimelimitApi, auth: Auth, onS
   const [requested, argument] = route.split('/')
   const screen = ['bans', 'limits', 'history', 'sites', 'category', 'device'].includes(requested) ? requested : ''
   const context: AppContext = { state, child, now, pending, run, showError }
+  const parent = findParentOfDevice(state, auth.ownDeviceId)
   const signOut = () => {
-    if (confirm('Выйти из пульта? Для входа снова понадобится код из письма.')) onSignOut()
+    if (confirm('Выйти из пульта? Для входа снова понадобится Google-аккаунт или код из письма.')) onSignOut()
   }
 
   return (
     <App.Provider value={context}>
       <header class='top'>
-        {kids.length > 1
-          ? (
-            <div class='segmented' role='tablist'>
-              {kids.map((kid) => (
-                <button type='button' role='tab' aria-selected={kid.id === child.id} key={kid.id}
-                  onClick={() => { writeLocal('child', kid.id); setChildId(kid.id) }}>{kid.name}</button>
-              ))}
-            </div>
-            )
-          : <h1>{child.name}</h1>}
+        <div class='who'>
+          {kids.length > 1
+            ? (
+              <div class='segmented' role='tablist'>
+                {kids.map((kid) => (
+                  <button type='button' role='tab' aria-selected={kid.id === child.id} key={kid.id}
+                    onClick={() => { writeLocal('child', kid.id); setChildId(kid.id) }}>{kid.name}</button>
+                ))}
+              </div>
+              )
+            : <h1>{child.name}</h1>}
+          <Account parent={parent} serverUrl={api.serverUrl} />
+        </div>
         <button type='button' class='link' onClick={signOut}>Выйти</button>
       </header>
       {syncProblem

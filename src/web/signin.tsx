@@ -6,7 +6,7 @@ import { createEmptyState, mergeServerStatus } from '../core/state.ts'
 import { errorText, type ErrorText } from './format.ts'
 import { browserTimeZone, ErrorBox, PasswordField } from './setup.tsx'
 import { type Auth, clearLocal, localStore, writeLocal } from './store.ts'
-import { SubmitButton, useBusy } from './ui.tsx'
+import { serverLabel, SubmitButton, useBusy } from './ui.tsx'
 
 // @tag:parent-console
 
@@ -26,7 +26,7 @@ declare global {
 type Step =
   | { name: 'mail' }
   | { name: 'code', mail: string, mailLoginToken: string }
-  | { name: 'device', mailAuthToken: string }
+  | { name: 'device', mailAuthToken: string, mail: string }
   | { name: 'create', mailAuthToken: string, mail: string }
   | { name: 'closed', mail: string }
 
@@ -49,7 +49,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
   /** A mail without a family goes to family creation, so a new parent never meets "no family uses this mail". */
   const afterMailAuth = async (mailAuthToken: string) => {
     const status = await api.getStatusByMailAuthToken({ mailAuthToken })
-    if (status.status === 'with family') setStep({ name: 'device', mailAuthToken })
+    if (status.status === 'with family') setStep({ name: 'device', mailAuthToken, mail: status.mail })
     else if (status.canCreateFamily) setStep({ name: 'create', mailAuthToken, mail: status.mail })
     else setStep({ name: 'closed', mail: status.mail })
   }
@@ -89,6 +89,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
   return (
     <main class='page signin'>
       <h1>Пульт TimeLimit</h1>
+      <p class='muted small account'>Сервер {serverLabel(api.serverUrl)}</p>
       {step.name === 'mail'
         ? (
           <>
@@ -123,6 +124,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
           <form onSubmit={attempt(async () => {
             await finish(await api.signInIntoFamily({ mailAuthToken: step.mailAuthToken, deviceName: deviceName.trim() || defaultDeviceName() }))
           })}>
+            <p>Вход подтверждён: {step.mail}. Семья на этой почте есть — осталось назвать пульт.</p>
             <label>Как назвать пульт в списке устройств семьи
               <input required maxLength={50} value={deviceName} onInput={(e) => setDeviceName(e.currentTarget.value)} />
             </label>

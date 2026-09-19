@@ -45,6 +45,8 @@ h3 { font-size: .95rem; margin: 1rem 0 .25rem; }
   padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
   background: var(--bg); border-bottom: 1px solid var(--line);
 }
+.top .who { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.account { overflow-wrap: anywhere; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 0 0 10px; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0 0; }

@@ -1,7 +1,7 @@
 import type { AddDeviceToken, PushActionItem, TimelimitApi } from './api.ts'
 import { ParentConsoleError } from './errors.ts'
 import type { ParentAction } from './protocol.ts'
-import { createEmptyState, type FamilyState, mergeServerStatus, toClientStatus } from './state.ts'
+import { createEmptyState, type FamilyState, findParentOfDevice, mergeServerStatus, toClientStatus } from './state.ts'
 
 // @tag:parent-console
 
@@ -59,18 +59,16 @@ export class ParentSession {
   }
 
   parentUserId (state: FamilyState): string {
-    const parents = state.users.data.filter((u) => u.type === 'parent')
+    const parent = findParentOfDevice(state, this.ownDeviceId)
+    if (parent) return parent.id
+
     const device = this.ownDeviceId ? state.devices.data.find((d) => d.deviceId === this.ownDeviceId) : undefined
     if (this.ownDeviceId && !device) {
       throw new ParentConsoleError(`device ${this.ownDeviceId} is not in the family device list`, 'the parent device was removed — run `login` again')
     }
     if (device) {
-      if (!parents.some((p) => p.id === device.currentUserId)) {
-        throw new ParentConsoleError(`device ${device.deviceId} (${device.name}) has no parent signed in`, 'run `login` again to get a parent device')
-      }
-      return device.currentUserId
+      throw new ParentConsoleError(`device ${device.deviceId} (${device.name}) has no parent signed in`, 'run `login` again to get a parent device')
     }
-    if (parents.length === 1) return parents[0].id
     throw new ParentConsoleError('cannot tell which parent this device belongs to', 'set ownDeviceId in the config (printed by `login`) or TIMELIMIT_DEVICE_ID')
   }
 

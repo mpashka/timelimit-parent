@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { mergeServerStatus, toClientStatus } from '../src/core/state.ts'
+import { findParentOfDevice, mergeServerStatus, toClientStatus } from '../src/core/state.ts'
 import { fixtureState } from './helpers.ts'
 
 test('full status is merged and parent password hashes are dropped', () => {
@@ -26,4 +26,12 @@ test('incremental status removes categories and replaces only the sent parts', (
   assert.equal(state.categories.games1.versions.base, 'b002')
   assert.deepEqual(state.categories.games1.apps, ['com.game'])
   assert.equal(state.users.version, 'us01')
+})
+
+test('the parent of the console is the user signed in on its own device', () => {
+  const state = fixtureState()
+  assert.equal(findParentOfDevice(state, 'devP01')?.mail, 'p@example.org')
+  assert.equal(findParentOfDevice(state, 'devC01'), undefined)
+  assert.equal(findParentOfDevice(state, 'gone01'), undefined)
+  assert.equal(findParentOfDevice(state)?.id, 'parnt1')
 })
