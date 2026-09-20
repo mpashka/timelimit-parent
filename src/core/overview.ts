@@ -1,6 +1,6 @@
 import { type Ban, isBanActiveAt, readBans, readLegacyBans } from './bans.ts'
 import { ParentConsoleError } from './errors.ts'
-import type { ServerRule, UsedTimeItem } from './protocol.ts'
+import type { ServerDevice, ServerRule, UsedTimeItem } from './protocol.ts'
 import { type CategoryView, childCategories, children, type FamilyState, type User } from './state.ts'
 import { localTime } from './time.ts'
 
@@ -96,6 +96,15 @@ export function findChild (state: FamilyState, query?: string): User {
   const found = list.find((c) => c.id === query) ?? list.find((c) => c.name.toLowerCase() === lower) ??
     uniquePrefix(list, (c) => c.name, lower)
   if (!found) throw new ParentConsoleError(`no child "${query}"`, `children: ${list.map((c) => c.name).join(', ')}`)
+  return found
+}
+
+export function findDevice (state: FamilyState, query: string): ServerDevice {
+  const list = state.devices.data
+  const lower = query.toLowerCase()
+  const found = list.find((d) => d.deviceId === query) ?? list.find((d) => d.name.toLowerCase() === lower) ??
+    uniquePrefix(list, (d) => d.name, lower)
+  if (!found) throw new ParentConsoleError(`no device "${query}"`, `devices: ${list.map((d) => `${d.deviceId} ${d.name}`).join(', ')}`)
   return found
 }
 

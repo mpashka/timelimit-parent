@@ -4,14 +4,14 @@ import { hostname } from 'node:os'
 import { basename } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 import { parseArgs } from 'node:util'
-import { TimelimitApi } from '../core/api.ts'
+import { TimelimitApi, TOKEN_LIFETIME_MS } from '../core/api.ts'
 import { addBanActions, readBans, removeBanActions } from '../core/bans.ts'
 import { exportChild, overlayConfigs, planImport, type PortableConfig } from '../core/config.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import {
   allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
-import { childOverview, findCategory, findChild, usageHistory } from '../core/overview.ts'
+import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
 import { ALL_DAYS, type ParentAction } from '../core/protocol.ts'
 import { ParentSession } from '../core/session.ts'
 import { childCategories, type FamilyState } from '../core/state.ts'
@@ -26,6 +26,9 @@ const usage = `timelimit-parent — parent console for a TimeLimit server
 usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
 
   login [--mail M] [--device-name N]      sign in with a mail code, print the device token
+  device list                             devices of the family and who uses them
+  device add                              code of five words for connecting a new device
+  device assign <device> <child|none>     who uses the device; "none" frees it again
   status [child]                          time used/left, bans, loopholes
   usage [child] [--days N]                used time per category per day
   grant <category> <minutes>              extra time for today
@@ -182,6 +185,29 @@ async function main (): Promise<void> {
       const overview = childOverview(state, child(args[0]).id, now)
       if (state.message) console.error(`server message: ${state.message}`)
       return print(formatOverview(overview), overview)
+    }
+    case 'device': {
+      if (args[0] === 'list') {
+        const rows = state.devices.data.map((device) => [
+          device.deviceId, device.name, device.model,
+          device.currentUserId ? (state.users.data.find((u) => u.id === device.currentUserId)?.name ?? device.currentUserId) : 'not assigned yet'
+        ])
+        return print(table(['id', 'name', 'model', 'used by'], rows), state.devices.data)
+      }
+      if (args[0] === 'add') {
+        const added = await session.createAddDeviceToken()
+        const until = localDateTime(now + TOKEN_LIFETIME_MS, child().timeZone)
+        return print(
+          `code: ${added.token}\nenter it on the new device (setup: connected mode → code from another TimeLimit installation)\nvalid until ${until}; a new code cancels this one`,
+          { ...added, validUntil: now + TOKEN_LIFETIME_MS }
+        )
+      }
+      if (args[0] === 'assign') {
+        const device = findDevice(state, need(args[1], 'device id or name'))
+        const target = need(args[2], 'child name or none')
+        return apply(session, [{ type: 'SET_DEVICE_USER', deviceId: device.deviceId, userId: target === 'none' ? '' : child(target).id }])
+      }
+      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign')
     }
     case 'usage': {
       const owner = child(args[0])

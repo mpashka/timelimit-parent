@@ -146,6 +146,7 @@ export type ParentAction =
   | { type: 'SET_USER_DISABLE_LIMITS_UNTIL', childId: string, time: number }
   | { type: 'UPDATE_CATEGORY_TEMPORARILY_BLOCKED', categoryId: string, blocked: boolean, endTime?: number }
   | { type: 'UPDATE_USER_URL_FILTER', userId: string, enabled: boolean, allow: string[], block: string[] }
+  | { type: 'SET_DEVICE_USER', deviceId: string, userId: string }
 
 export const MINUTE_MAX = 24 * 60 - 1
 export const URL_FILTER_API_LEVEL = 10
