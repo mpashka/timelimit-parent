@@ -22,23 +22,30 @@ export interface PushResult {
   state: FamilyState
 }
 
+/**
+ * Who the caller is to the sync server. The protocol names the field `deviceAuthToken` and the
+ * identifier `deviceId`, but since the parent-session extension both may also stand for a
+ * signed-in person — see docs/implementation/web-admin.md, "Вход пользователем".
+ */
+export type Subject =
+  | { kind: 'device', authToken: string, deviceId?: string }
+  | { kind: 'session', authToken: string, sessionId: string, userId: string }
+
 const MAX_ACTIONS_PER_REQUEST = 50
 
-export class ParentSession {
+export class SyncClient {
   private readonly api: TimelimitApi
-  private readonly deviceAuthToken: string
+  private readonly subject: Subject
   private readonly storage: KeyValueStorage
-  private readonly ownDeviceId: string | undefined
   private readonly now: () => number
   private cached: FamilyState | undefined
 
-  constructor ({ api, deviceAuthToken, storage, ownDeviceId, now = Date.now }: {
-    api: TimelimitApi, deviceAuthToken: string, storage: KeyValueStorage, ownDeviceId?: string, now?: () => number
+  constructor ({ api, subject, storage, now = Date.now }: {
+    api: TimelimitApi, subject: Subject, storage: KeyValueStorage, now?: () => number
   }) {
     this.api = api
-    this.deviceAuthToken = deviceAuthToken
+    this.subject = subject
     this.storage = storage
-    this.ownDeviceId = ownDeviceId
     this.now = now
   }
 
@@ -51,7 +58,7 @@ export class ParentSession {
 
   async sync ({ full = false }: { full?: boolean } = {}): Promise<FamilyState> {
     const previous = full ? createEmptyState() : await this.loadCachedState()
-    const status = await this.api.pullStatus({ deviceAuthToken: this.deviceAuthToken, status: toClientStatus(previous) })
+    const status = await this.api.pullStatus({ deviceAuthToken: this.subject.authToken, status: toClientStatus(previous) })
     const state = mergeServerStatus(previous, status)
     this.cached = state
     await this.storage.set('state', JSON.stringify(state))
@@ -59,12 +66,22 @@ export class ParentSession {
   }
 
   parentUserId (state: FamilyState): string {
-    const parent = findParentOfDevice(state, this.ownDeviceId)
+    if (this.subject.kind === 'session') {
+      const { userId, sessionId } = this.subject
+      if (state.users.data.some((user) => user.id === userId && user.type === 'parent')) return userId
+      throw new ParentConsoleError(
+        `the parent of session ${sessionId} (${userId}) is no longer in the family`,
+        'the parent was removed from the family — sign in again'
+      )
+    }
+
+    const ownDeviceId = this.subject.deviceId
+    const parent = findParentOfDevice(state, ownDeviceId)
     if (parent) return parent.id
 
-    const device = this.ownDeviceId ? state.devices.data.find((d) => d.deviceId === this.ownDeviceId) : undefined
-    if (this.ownDeviceId && !device) {
-      throw new ParentConsoleError(`device ${this.ownDeviceId} is not in the family device list`, 'the parent device was removed — run `login` again')
+    const device = ownDeviceId ? state.devices.data.find((d) => d.deviceId === ownDeviceId) : undefined
+    if (ownDeviceId && !device) {
+      throw new ParentConsoleError(`device ${ownDeviceId} is not in the family device list`, 'the parent device was removed — run `login` again')
     }
     if (device) {
       throw new ParentConsoleError(`device ${device.deviceId} (${device.name}) has no parent signed in`, 'run `login` again to get a parent device')
@@ -84,7 +101,7 @@ export class ParentSession {
       for (const action of chunk) {
         items.push({ encodedAction: JSON.stringify(action), sequenceNumber: await this.nextSequenceNumber(), integrity: 'device', type: 'parent', userId })
       }
-      const { shouldDoFullSync } = await this.api.pushActions({ deviceAuthToken: this.deviceAuthToken, actions: items })
+      const { shouldDoFullSync } = await this.api.pushActions({ deviceAuthToken: this.subject.authToken, actions: items })
       if (shouldDoFullSync) {
         await this.sync({ full: true })
         throw new ParentConsoleError(
@@ -100,7 +117,7 @@ export class ParentSession {
   /** Five words the child's device enters to join the family; the server keeps only the newest token per family. */
   async createAddDeviceToken (): Promise<AddDeviceToken> {
     const parentId = this.parentUserId(await this.sync())
-    return this.api.createAddDeviceToken({ deviceAuthToken: this.deviceAuthToken, parentId })
+    return this.api.createAddDeviceToken({ deviceAuthToken: this.subject.authToken, parentId })
   }
 
   private async nextSequenceNumber (): Promise<number> {

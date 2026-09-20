@@ -13,7 +13,7 @@ import {
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
 import { ALL_DAYS, type ParentAction } from '../core/protocol.ts'
-import { ParentSession } from '../core/session.ts'
+import { SyncClient } from '../core/session.ts'
 import { childCategories, type FamilyState } from '../core/state.ts'
 import { formatClock, formatDays, parseClock, parseDays, parseDurationMinutes, parseUntil } from '../core/time.ts'
 import {
@@ -90,17 +90,16 @@ function need (value: string | undefined, what: string): string {
 const config = readConfig()
 const api = new TimelimitApi({ serverUrl: serverUrl(config, options.server) })
 
-function openSession (): ParentSession {
+function openSession (): SyncClient {
   const deviceId = ownDeviceId(config)
-  return new ParentSession({
+  return new SyncClient({
     api,
-    deviceAuthToken: readDeviceToken(config),
-    storage: new FileStorage(`${new URL(api.serverUrl).host}-${deviceId ?? 'default'}`),
-    ownDeviceId: deviceId
+    subject: { kind: 'device', authToken: readDeviceToken(config), deviceId },
+    storage: new FileStorage(`${new URL(api.serverUrl).host}-${deviceId ?? 'default'}`)
   })
 }
 
-async function apply (session: ParentSession, actions: ParentAction[], warnings: string[] = []): Promise<void> {
+async function apply (session: SyncClient, actions: ParentAction[], warnings: string[] = []): Promise<void> {
   for (const warning of warnings) console.error(`warning: ${warning}`)
   if (options['dry-run'] || actions.length === 0) {
     print(formatActions(actions), { dryRun: Boolean(options['dry-run']), actions, warnings })
@@ -285,7 +284,7 @@ async function main (): Promise<void> {
   }
 }
 
-async function importConfig (session: ParentSession, state: FamilyState, config: PortableConfig): Promise<void> {
+async function importConfig (session: SyncClient, state: FamilyState, config: PortableConfig): Promise<void> {
   const target = options['new-child']
     ? { newChild: { name: options['new-child'], timeZone: options['time-zone'] } }
     : { childId: findChild(state, options.child).id }
@@ -293,7 +292,7 @@ async function importConfig (session: ParentSession, state: FamilyState, config:
   return apply(session, plan.actions, plan.warnings)
 }
 
-async function ban (session: ParentSession, state: FamilyState, args: string[], now: number): Promise<void> {
+async function ban (session: SyncClient, state: FamilyState, args: string[], now: number): Promise<void> {
   const [sub, ...rest] = args
   const owner = findChild(state, sub === 'list' ? rest[0] ?? options.child : options.child)
   const categories = childCategories(state, owner.id)

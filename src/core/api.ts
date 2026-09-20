@@ -20,6 +20,13 @@ export interface SignInResult {
   data: ServerDataStatus
 }
 
+export interface SessionSignInResult {
+  sessionToken: string
+  sessionId: string
+  familyId: string
+  userId: string
+}
+
 export interface MailStatus {
   status: 'with family' | 'without family'
   mail: string
@@ -106,6 +113,22 @@ export class TimelimitApi {
         401: 'mail authentication expired or was already used — log in again'
       }
     )
+  }
+
+  /** Signs a person in without registering a device; needs apiLevel >= PARENT_SESSION_API_LEVEL. */
+  async signInSession ({ mailAuthToken }: { mailAuthToken: string }): Promise<SessionSignInResult> {
+    return this.post<SessionSignInResult>(
+      '/session/sign-in', { mailAuthToken },
+      {
+        404: 'this server has no parent sessions (needs the parent-console server branch)',
+        409: 'no family uses this mail address — create the family first',
+        401: 'mail authentication expired or was already used — log in again'
+      }
+    )
+  }
+
+  async revokeSession ({ sessionToken }: { sessionToken: string }): Promise<void> {
+    await this.post('/session/revoke', { sessionToken }, { 401: 'the session is already gone' })
   }
 
   async createAddDeviceToken ({ deviceAuthToken, parentId }: { deviceAuthToken: string, parentId: string }): Promise<AddDeviceToken> {

@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { TimelimitApi } from '../src/core/api.ts'
 import { ApiError, ParentConsoleError } from '../src/core/errors.ts'
 import type { ParentAction } from '../src/core/protocol.ts'
-import { MemoryStorage, ParentSession } from '../src/core/session.ts'
+import { MemoryStorage, SyncClient } from '../src/core/session.ts'
 import { fullStatus } from './helpers.ts'
 
 function fakeServer ({ rejectPush = false, status = 200 } = {}) {
@@ -24,7 +24,7 @@ const grant: ParentAction = { type: 'INCREMENT_CATEGORY_EXTRATIME', categoryId: 
 test('pushed actions carry the parent of this device and strictly increasing persisted sequence numbers', async () => {
   const { api, calls } = fakeServer()
   const storage = new MemoryStorage()
-  const session = new ParentSession({ api, deviceAuthToken: 'token', storage, ownDeviceId: 'devP01', now: () => 5000 })
+  const session = new SyncClient({ api, subject: { kind: 'device', authToken: 'token', deviceId: 'devP01' }, storage, now: () => 5000 })
   const actions = Array.from({ length: 51 }, () => grant)
   const { pushed } = await session.push(actions)
   assert.equal(pushed, 51)
@@ -39,7 +39,7 @@ test('pushed actions carry the parent of this device and strictly increasing per
 
 test('a flagged push re-pulls the full state and names what was not applied', async () => {
   const { api, calls } = fakeServer({ rejectPush: true })
-  const session = new ParentSession({ api, deviceAuthToken: 'token', storage: new MemoryStorage(), ownDeviceId: 'devP01' })
+  const session = new SyncClient({ api, subject: { kind: 'device', authToken: 'token', deviceId: 'devP01' }, storage: new MemoryStorage() })
   await assert.rejects(session.push([grant]), (ex: unknown) => ex instanceof ParentConsoleError && /rejected at least one of actions 1\.\.1/.test(ex.message))
   const lastPull = calls.filter((c) => c.path === '/sync/pull-status').at(-1)!
   assert.equal(lastPull.body.status.users, '')
@@ -47,7 +47,7 @@ test('a flagged push re-pulls the full state and names what was not applied', as
 
 test('HTTP errors name the endpoint, the status and what to do', async () => {
   const { api } = fakeServer({ status: 401 })
-  const session = new ParentSession({ api, deviceAuthToken: 'bad', storage: new MemoryStorage() })
+  const session = new SyncClient({ api, subject: { kind: 'device', authToken: 'bad' }, storage: new MemoryStorage() })
   await assert.rejects(session.sync(), (ex: unknown) => ex instanceof ApiError && ex.status === 401 &&
     ex.message === '/sync/pull-status: HTTP 401 — Unauthorized' && /login/.test(ex.hint ?? ''))
 })

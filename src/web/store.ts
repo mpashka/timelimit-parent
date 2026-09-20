@@ -1,6 +1,6 @@
 import { type AddDeviceToken, TimelimitApi } from '../core/api.ts'
 import type { ParentAction } from '../core/protocol.ts'
-import { type KeyValueStorage, ParentSession } from '../core/session.ts'
+import { type KeyValueStorage, SyncClient } from '../core/session.ts'
 import type { FamilyState } from '../core/state.ts'
 
 // @tag:parent-console
@@ -47,11 +47,11 @@ export const createApi = (config: WebConfig): TimelimitApi => new TimelimitApi({
 
 /** One session per signed-in browser; requests run one after another so a poll never merges over a push. */
 export class Connection {
-  private readonly session: ParentSession
+  private readonly session: SyncClient
   private queue: Promise<unknown> = Promise.resolve()
 
   constructor (api: TimelimitApi, auth: Auth) {
-    this.session = new ParentSession({ api, deviceAuthToken: auth.deviceAuthToken, storage: localStore, ownDeviceId: auth.ownDeviceId })
+    this.session = new SyncClient({ api, subject: { kind: 'device', authToken: auth.deviceAuthToken, deviceId: auth.ownDeviceId }, storage: localStore })
   }
 
   cached (): Promise<FamilyState> {

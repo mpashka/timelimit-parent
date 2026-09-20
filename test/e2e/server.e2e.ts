@@ -15,7 +15,7 @@ import {
   addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, revokeExtraTime, setDailyLimit, setUrlFilter, undoLimitApp, unlockChild
 } from '../../src/core/operations.ts'
 import { hashParentPassword } from '../../src/core/password.ts'
-import { MemoryStorage, ParentSession } from '../../src/core/session.ts'
+import { MemoryStorage, SyncClient } from '../../src/core/session.ts'
 import { childCategories, type FamilyState } from '../../src/core/state.ts'
 import { localTime } from '../../src/core/time.ts'
 
@@ -35,7 +35,7 @@ let server: ChildProcess
 let output = ''
 let dataDir: string
 let api: TimelimitApi
-let session: ParentSession
+let session: SyncClient
 let childId: string
 let newFamilyToken: string
 
@@ -113,7 +113,7 @@ test('create family with client-side password hashes, reusing the token of the s
   assert.equal(parent.mail, mail)
   assert.ok(bcrypt.compareSync(PASSWORD, parent.password!), 'the stored hash unlocks with the password, as BCrypt.checkpw on the child device does')
   assert.equal(result.data.devices!.data.find((d) => d.deviceId === result.ownDeviceId)?.currentUserId, parent.id)
-  session = new ParentSession({ api, deviceAuthToken: result.deviceAuthToken, storage: new MemoryStorage(), ownDeviceId: result.ownDeviceId })
+  session = new SyncClient({ api, subject: { kind: 'device', authToken: result.deviceAuthToken, deviceId: result.ownDeviceId }, storage: new MemoryStorage() })
 })
 
 test('the mail now has a family and a second console signs into it', async () => {

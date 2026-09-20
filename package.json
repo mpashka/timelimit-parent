@@ -9,7 +9,8 @@
   },
   "bin": {
     "timelimit-parent": "dist/cli/main.js",
-    "tlp": "dist/cli/main.js"
+    "tlp": "dist/cli/main.js",
+    "timelimit-bff": "dist/bff/main.js"
   },
   "exports": {
     "./core": "./dist/core/index.js"
@@ -20,6 +21,7 @@
     "test": "rm -rf build && tsc -p tsconfig.test.json && node --test \"build/test/**/*.test.js\"",
     "test:e2e": "rm -rf build && tsc -p tsconfig.test.json && node --test --test-concurrency=1 build/test/e2e/server.e2e.js",
     "cli": "npm run build --silent && node dist/cli/main.js",
+    "bff": "npm run build --silent && node dist/bff/main.js",
     "web": "node scripts/web.mjs dev",
     "web:mock": "node scripts/web.mjs dev --mock"
   },
