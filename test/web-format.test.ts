@@ -29,6 +29,13 @@ test('an unknown device token asks to sign in again', () => {
   assert.equal(errorText(new ApiError({ endpoint: '/sync/pull-status', status: 401, body: '' })).signInAgain, true)
 })
 
+test('401 while signing in blames the mail confirmation, not a device that does not exist yet', () => {
+  const signIn = errorText(new ApiError({ endpoint: '/parent/sign-in-into-family', status: 401, body: '' }))
+  assert.match(signIn.title, /почт/i)
+  assert.equal(signIn.signInAgain, true)
+  assert.match(errorText(new ApiError({ endpoint: '/sync/pull-status', status: 401, body: '' })).title, /устройство/i)
+})
+
 test('countdown shows hours, padded minutes and seconds and stops at zero', () => {
   assert.deepEqual([3 * 3600000, 3 * 3600000 - 1, 61500, 0, -1000].map(formatCountdown), ['3:00:00', '3:00:00', '0:01:02', '0:00:00', '0:00:00'])
 })

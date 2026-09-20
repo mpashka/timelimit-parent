@@ -26,7 +26,6 @@ declare global {
 type Step =
   | { name: 'mail' }
   | { name: 'code', mail: string, mailLoginToken: string }
-  | { name: 'device', mailAuthToken: string, mail: string }
   | { name: 'create', mailAuthToken: string, mail: string }
   | { name: 'closed', mail: string }
 
@@ -42,14 +41,17 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
   const [phase, wrap] = useBusy()
   const [mail, setMail] = useState('')
   const [code, setCode] = useState('')
-  const [deviceName, setDeviceName] = useState(defaultDeviceName())
   const [parentName, setParentName] = useState('')
   const [password, setPassword] = useState('')
 
-  /** A mail without a family goes to family creation, so a new parent never meets "no family uses this mail". */
+  /**
+   * Confirming the mail is the sign-in: the family is entered right away, without a second button
+   * that repeats the word the person has already pressed. A mail without a family goes to family
+   * creation, so a new parent never meets "no family uses this mail".
+   */
   const afterMailAuth = async (mailAuthToken: string) => {
     const status = await api.getStatusByMailAuthToken({ mailAuthToken })
-    if (status.status === 'with family') setStep({ name: 'device', mailAuthToken, mail: status.mail })
+    if (status.status === 'with family') await finish(await api.signInIntoFamily({ mailAuthToken, deviceName: defaultDeviceName() }))
     else if (status.canCreateFamily) setStep({ name: 'create', mailAuthToken, mail: status.mail })
     else setStep({ name: 'closed', mail: status.mail })
   }
@@ -63,6 +65,13 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
 
   const restart = () => { setError(null); setCode(''); setStep({ name: 'mail' }) }
 
+  /** A dead mail confirmation leaves nothing that can work on the current step, so the form returns to its start. */
+  const failed = (ex: unknown) => {
+    const text = errorText(ex)
+    if (text.signInAgain) { setCode(''); setStep({ name: 'mail' }) }
+    setError(text)
+  }
+
   const attempt = (work: () => Promise<void>) => (event: Event) => {
     event.preventDefault()
     setError(null)
@@ -70,7 +79,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
       try {
         await work()
       } catch (ex) {
-        setError(errorText(ex))
+        failed(ex)
       }
     })
   }
@@ -81,7 +90,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
       try {
         await afterMailAuth(await api.signInByGoogle({ idToken, locale: 'ru' }))
       } catch (ex) {
-        setError(errorText(ex))
+        failed(ex)
       }
     })
   }
@@ -114,22 +123,8 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
             <label>Код из письма на {step.mail} — три слова
               <input autocapitalize='off' autocomplete='one-time-code' autocorrect='off' spellcheck={false} required value={code} onInput={(e) => setCode(e.currentTarget.value)} />
             </label>
-            <SubmitButton phase={phase}>Дальше</SubmitButton>
+            <SubmitButton phase={phase}>Открыть пульт</SubmitButton>
             <button type='button' class='link' onClick={restart}>Другая почта</button>
-          </form>
-          )
-        : null}
-      {step.name === 'device'
-        ? (
-          <form onSubmit={attempt(async () => {
-            await finish(await api.signInIntoFamily({ mailAuthToken: step.mailAuthToken, deviceName: deviceName.trim() || defaultDeviceName() }))
-          })}>
-            <p>Вход подтверждён: {step.mail}. Семья на этой почте есть — осталось назвать пульт.</p>
-            <label>Как назвать пульт в списке устройств семьи
-              <input required maxLength={50} value={deviceName} onInput={(e) => setDeviceName(e.currentTarget.value)} />
-            </label>
-            <SubmitButton phase={phase}>Войти</SubmitButton>
-            <button type='button' class='link' onClick={restart}>Начать заново</button>
           </form>
           )
         : null}
@@ -140,7 +135,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
               mailAuthToken: step.mailAuthToken,
               password: await hashParentPassword(password),
               parentName: parentName.trim(),
-              deviceName: deviceName.trim() || defaultDeviceName(),
+              deviceName: defaultDeviceName(),
               timeZone: browserTimeZone()
             }))
           })}>
@@ -149,9 +144,6 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
               <input required maxLength={50} autocomplete='given-name' value={parentName} onInput={(e) => setParentName(e.currentTarget.value)} />
             </label>
             <PasswordField value={password} onInput={setPassword} />
-            <label>Как назвать пульт в списке устройств семьи
-              <input required maxLength={50} value={deviceName} onInput={(e) => setDeviceName(e.currentTarget.value)} />
-            </label>
             <SubmitButton phase={phase}>Создать семью</SubmitButton>
             <button type='button' class='link' onClick={restart}>Другая почта</button>
           </form>
@@ -166,7 +158,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
           )
         : null}
       <ErrorBox error={error} />
-      <p class='muted small'>Нет семьи — пульт создаст её. Есть — войдёт в неё ещё одним устройством родителя, без пароля. Выход — кнопка «Выйти» наверху.</p>
+      <p class='muted small'>Нет семьи — пульт создаст её. Есть — войдёт в неё ещё одним устройством родителя, без пароля; в списке устройств семьи он появится как «{defaultDeviceName()}». Выход — кнопка «Выйти» наверху.</p>
       <p class='muted small'>timelimit-parent, AGPL-3.0.</p>
     </main>
   )

@@ -86,8 +86,14 @@ export const filterLines = (text: string): string[] => text.split('\n').map((s) 
 
 export interface ErrorText { title: string, hint?: string, signInAgain: boolean }
 
+/** 401 before the console has a device means the mail confirmation died, not that the family lost the console. */
+const MAIL_AUTH_ENDPOINTS = ['/auth/', '/parent/sign-in-into-family', '/parent/get-status-by-mail-address', '/parent/create-family']
+
 export function errorText (ex: unknown): ErrorText {
   if (ex instanceof ApiError && ex.status === 401) {
+    if (MAIL_AUTH_ENDPOINTS.some((endpoint) => ex.endpoint.startsWith(endpoint))) {
+      return { title: 'Подтверждение почты больше не годится', hint: 'Оно одноразовое и живёт три часа — начните вход заново.', signInAgain: true }
+    }
     return { title: 'Сервер не знает это устройство', hint: 'Пульт удалили из семьи или вход устарел — войдите заново.', signInAgain: true }
   }
   if (ex instanceof ParentConsoleError && /cannot reach/.test(ex.message)) {
