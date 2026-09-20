@@ -21,6 +21,11 @@ export interface ViewContext {
   state: FamilyState
   now: number
   childId?: string
+  /**
+   * Where the family lives, as the person would type it. Not the address the BFF dials: inside the
+   * compose project that is `http://api:8080`, and a header saying so would name a host nobody can
+   * reach.
+   */
   serverUrl: string
   signedInUserId: string
 }

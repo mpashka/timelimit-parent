@@ -185,7 +185,7 @@ export class Bff {
   private async handleView (name: string, url: URL, request: IncomingMessage, response: ServerResponse): Promise<void> {
     const session = this.requireSession(request)
     const { state, staleSince } = await this.stateOf(session)
-    const data = buildView(name, this.viewContext(session, state, url))
+    const data = buildView(name, this.viewContext(session, state, url, request))
     send(response, 200, staleSince === undefined ? { data } : { data, staleSince })
   }
 
@@ -202,15 +202,15 @@ export class Bff {
     })
     this.notify(session.cookieId)
     const view = typeof body.view === 'string' ? body.view : undefined
-    send(response, 200, view ? { data: buildView(view, this.viewContext(session, result, url)) } : { ok: true })
+    send(response, 200, view ? { data: buildView(view, this.viewContext(session, result, url, request)) } : { ok: true })
   }
 
-  private viewContext (session: StoredSession, state: FamilyState, url: URL): ViewContext {
+  private viewContext (session: StoredSession, state: FamilyState, url: URL, request: IncomingMessage): ViewContext {
     return {
       state,
       now: this.now(),
       childId: url.searchParams.get('child') ?? undefined,
-      serverUrl: this.api.serverUrl,
+      serverUrl: publicUrl(request) ?? this.api.serverUrl,
       signedInUserId: session.userId
     }
   }
@@ -384,6 +384,18 @@ function requireString (body: Record<string, unknown>, field: string): string {
   const value = body[field]
   if (typeof value !== 'string' || value === '') throw new BadRequestError(`${field} must be a non-empty string`)
   return value
+}
+
+/** The name the browser used, as nginx forwards it — the BFF has no other way to know it. */
+function publicUrl (request: IncomingMessage): string | undefined {
+  const host = firstHeader(request, 'x-forwarded-host') ?? request.headers.host
+  if (!host) return undefined
+  return `${firstHeader(request, 'x-forwarded-proto') ?? 'https'}://${host}`
+}
+
+function firstHeader (request: IncomingMessage, name: string): string | undefined {
+  const value = request.headers[name]
+  return (Array.isArray(value) ? value[0] : value)?.split(',')[0].trim() || undefined
 }
 
 function readCookie (header: string | undefined, name: string): string | undefined {
