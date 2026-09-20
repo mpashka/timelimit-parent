@@ -200,7 +200,7 @@ test('undo: revoke extra time, undo an app limit, delete a ban', async () => {
   const actions = limitApp({ state, childId, packageName: 'com.game', minutes: 10, title: 'Game' })
   state = (await session.push(actions)).state
   assert.deepEqual(categoryByTitle(state, 'Game').apps, ['com.game'])
-  state = (await session.push(undoLimitApp({ actions, packageName: 'com.game', previousCategoryId: categoryByTitle(state, 'Игры').id }))).state
+  state = (await session.push(undoLimitApp({ state, childId, packageName: 'com.game', previousCategoryId: categoryByTitle(state, 'Игры').id }))).state
   assert.equal(childCategories(state, childId).some((c) => c.base.title === 'Game'), false)
   assert.deepEqual(categoryByTitle(state, 'Игры').apps, ['com.game'])
 

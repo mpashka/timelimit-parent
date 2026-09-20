@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { ApiError } from '../src/core/errors.ts'
 import { parseDays } from '../src/core/time.ts'
-import { banEndsAt, banLabel, errorText, formatCountdown, formatDuration, formatUntil } from '../src/web/format.ts'
+import { banEndsAt, banLabel, BffError, errorText, type FailureKind, formatCountdown, formatDuration, formatUntil } from '../src/web/format.ts'
 import { moscow } from './helpers.ts'
 
 test('durations read as minutes, hours and hours with padded minutes', () => {
@@ -25,15 +24,24 @@ test('an overnight ban seen in the evening ends tomorrow morning, seen in the mo
   assert.equal(formatUntil(moscow(17, 9), moscow(14, 22), 'Europe/Moscow'), 'до чт 17.09 09:00')
 })
 
-test('an unknown device token asks to sign in again', () => {
-  assert.equal(errorText(new ApiError({ endpoint: '/sync/pull-status', status: 401, body: '' })).signInAgain, true)
+const failure = (kind: FailureKind, title: string, hint?: string) =>
+  new BffError({ kind, title, hint, signInAgain: kind === 'mail-auth-expired' || kind === 'session-gone' })
+
+test('a failure is read by its kind, not by the endpoint that produced it', () => {
+  const mail = errorText(failure('mail-auth-expired', 'mail authentication expired'))
+  assert.match(mail.title, /почт/i)
+  assert.equal(mail.signInAgain, true)
+
+  const gone = errorText(failure('session-gone', 'no parent session for this browser'))
+  assert.match(gone.title, /вход/i)
+  assert.equal(gone.signInAgain, true)
 })
 
-test('401 while signing in blames the mail confirmation, not a device that does not exist yet', () => {
-  const signIn = errorText(new ApiError({ endpoint: '/parent/sign-in-into-family', status: 401, body: '' }))
-  assert.match(signIn.title, /почт/i)
-  assert.equal(signIn.signInAgain, true)
-  assert.match(errorText(new ApiError({ endpoint: '/sync/pull-status', status: 401, body: '' })).title, /устройство/i)
+test('no connection and an unsupported server say what to do; anything else is shown as the BFF wrote it', () => {
+  assert.match(errorText(failure('sync-unreachable', 'https://server.test не отвечает')).title, /нет связи/i)
+  assert.match(errorText(failure('not-supported', 'the url filter needs apiLevel 10')).title, /apiLevel 10/)
+  assert.deepEqual(errorText(failure('bad-request', 'нет такой категории', 'обновите экран')),
+    { title: 'нет такой категории', hint: 'обновите экран', signInAgain: false })
 })
 
 test('countdown shows hours, padded minutes and seconds and stops at zero', () => {

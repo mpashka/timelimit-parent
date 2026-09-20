@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createdRuleIds, readBans, replaceBanActions } from '../src/core/bans.ts'
-import { grantExtraTime, limitApp, lockChild, restoreDailyLimits, restoreTemporaryBlocks, revokeExtraTime, setDailyLimit, undoLimitApp } from '../src/core/operations.ts'
+import { grantExtraTime, lockChild, restoreDailyLimits, restoreTemporaryBlocks, revokeExtraTime, setDailyLimit, undoLimitApp } from '../src/core/operations.ts'
 import { childCategories } from '../src/core/state.ts'
 import { fixtureState, moscow } from './helpers.ts'
 
@@ -37,13 +37,16 @@ test('undo of a limit change deletes the new daily limit and recreates the old o
   assert.ok(undo[1].type === 'CREATE_TIMELIMIT_RULE' && undo[1].rule.time === 3600000 && undo[1].rule.days === 127)
 })
 
-test('undo of an app limit moves the app back and deletes the created sub-category', () => {
-  const actions = limitApp({ state: fixtureState(), childId: 'child1', packageName: 'com.game', minutes: 30 })
-  const created = actions[0].type === 'CREATE_CATEGORY' ? actions[0].categoryId : ''
-  assert.deepEqual(undoLimitApp({ actions, packageName: 'com.game', previousCategoryId: 'games1' }), [
-    { type: 'ADD_CATEGORY_APPS', categoryId: 'games1', packageNames: ['com.game'] },
-    { type: 'DELETE_CATEGORY', categoryId: created }
+test('undo of an app limit moves the app back and deletes the sub-category the app now sits in', () => {
+  const state = fixtureState()
+  assert.deepEqual(undoLimitApp({ state, childId: 'child1', packageName: 'com.google.android.youtube', previousCategoryId: 'games1' }), [
+    { type: 'ADD_CATEGORY_APPS', categoryId: 'games1', packageNames: ['com.google.android.youtube'] },
+    { type: 'DELETE_CATEGORY', categoryId: 'yt0001' }
   ])
+})
+
+test('undo of an app limit refuses a category that is not the one made for the app', () => {
+  assert.throws(() => undoLimitApp({ state: fixtureState(), childId: 'child1', packageName: 'com.game', previousCategoryId: 'allow1' }), /not the sub-category/)
 })
 
 test('changing only the categories of a ban deletes and recreates its rules instead of losing them', () => {

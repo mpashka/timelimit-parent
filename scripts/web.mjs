@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // @tag:parent-console
-// Web console: `build` writes dist/web/; `dev` rebuilds on change and serves it under BASE with the
-// sync API proxied to --server, or answered from the test fixture with --mock.
+// Web console: `build` writes dist/web/; `dev` rebuilds on change and serves it under BASE with
+// /api proxied to the BFF (--bff), or to a BFF started here on top of the test fixture (--mock).
 import { cpSync, mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { extname, join, normalize } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import * as esbuild from 'esbuild'
 
@@ -14,7 +15,8 @@ const out = join(root, 'dist/web')
 const { values: options, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    server: { type: 'string', default: process.env.TIMELIMIT_SERVER ?? 'https://child-time.pasha-home.ru' },
+    // The browser talks only to the BFF now; 5181 is its port in the development port registry.
+    bff: { type: 'string', default: process.env.TIMELIMIT_BFF ?? 'http://127.0.0.1:5181' },
     mock: { type: 'boolean' },
     // Shared registry of development ports; 5173 is taken by another project's vite.
     port: { type: 'string', default: '5180' },
@@ -58,7 +60,7 @@ function mockApi (path, body) {
   const shift = today - 20710
   for (const item of fixture.usedTimes) for (const t of item.times) t.day += shift
   for (const base of fixture.categoryBase) if (base.extraTimeDay >= 0) base.extraTimeDay += shift
-  fixture.apiLevel = 10
+  fixture.apiLevel = 11
   if (mockFamilyWithoutChild) hideChildren(fixture)
   switch (path) {
     case '/auth/send-mail-login-code-v2': return { mailLoginToken: 'mock' }
@@ -75,6 +77,10 @@ function mockApi (path, body) {
     case '/parent/sign-in-into-family':
       mockFamilyWithoutChild = false
       return { deviceAuthToken: 'mock-token', ownDeviceId: 'devP01', data: fixture }
+    case '/session/sign-in':
+      return { sessionToken: 's:' + 'm'.repeat(32), sessionId: 'sess01', familyId: 'fam1', userId: 'parnt1' }
+    case '/session/revoke':
+      return { ok: true }
     case '/parent/create-add-device-token':
       mockDeviceTokenAt = Date.now()
       return { token: 'apple river stone cloud seven', deviceId: 'devNew1' }
@@ -92,15 +98,46 @@ function mockApi (path, body) {
   }
 }
 
-function proxy (req, res) {
-  const target = new URL(req.url, options.server)
-  const send = target.protocol === 'https:' ? httpsRequest : httpRequest
-  const upstream = send(target, { method: req.method, headers: { ...req.headers, host: target.host } }, (answer) => {
+/**
+ * The mock runs the real BFF against the test fixture: views, intents and events then behave as in
+ * production, and only the sync server is made up. Built with esbuild because node does not run
+ * TypeScript sources on its own.
+ */
+async function startMockBff () {
+  const file = join(root, 'build/dev-bff.mjs')
+  await esbuild.build({
+    stdin: {
+      contents: "export { Bff } from './src/bff/server.ts'\nexport { BffStore } from './src/bff/store.ts'\nexport { TimelimitApi } from './src/core/api.ts'\n",
+      resolveDir: root,
+      loader: 'ts'
+    },
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    packages: 'external',
+    outfile: file,
+    logLevel: 'warning'
+  })
+  const { Bff, BffStore, TimelimitApi } = await import(pathToFileURL(file))
+  const fetchImpl = async (url, init) => {
+    const result = mockApi(new URL(url).pathname, init?.body ? JSON.parse(init.body) : {})
+    const [status, payload] = Array.isArray(result) ? result : [200, result]
+    return status === 200 ? Response.json(payload) : new Response(payload, { status })
+  }
+  const bff = new Bff({ store: new BffStore(':memory:'), api: new TimelimitApi({ serverUrl: 'https://mock.invalid', fetchImpl }) })
+  await bff.listen(0)
+  return `http://127.0.0.1:${bff.server.address().port}`
+}
+
+function proxy (req, res, target) {
+  const upstream = new URL(req.url, target)
+  const send = upstream.protocol === 'https:' ? httpsRequest : httpRequest
+  const call = send(upstream, { method: req.method, headers: { ...req.headers, host: upstream.host } }, (answer) => {
     res.writeHead(answer.statusCode ?? 502, answer.headers)
     answer.pipe(res)
   })
-  upstream.on('error', (ex) => { res.writeHead(502); res.end(`proxy to ${options.server} failed: ${ex.message}`) })
-  req.pipe(upstream)
+  call.on('error', (ex) => { res.writeHead(502); res.end(`proxy to ${target} failed: ${ex.message}`) })
+  req.pipe(call)
 }
 
 async function serve () {
@@ -108,6 +145,7 @@ async function serve () {
   copyStatic()
   await context.watch()
   const base = options.base
+  const api = options.mock ? await startMockBff() : options.bff
   createServer((req, res) => {
     const path = new URL(req.url, 'http://local').pathname
     if (path === '/' || path === base.slice(0, -1)) { res.writeHead(302, { location: base }); res.end(); return }
@@ -118,15 +156,7 @@ async function serve () {
       res.end(readFileSync(file))
       return
     }
-    if (!options.mock) { proxy(req, res); return }
-    let raw = ''
-    req.on('data', (chunk) => { raw += chunk })
-    req.on('end', () => {
-      const result = mockApi(path, raw ? JSON.parse(raw) : {})
-      const [status, payload] = Array.isArray(result) ? result : [200, result]
-      res.writeHead(status, { 'content-type': status === 200 ? 'application/json' : 'text/plain' })
-      res.end(status === 200 ? JSON.stringify(payload) : payload)
-    })
+    proxy(req, res, api)
   }).on('error', (ex) => {
     // Never fall back to a neighbouring port: a phone forwarding this one would silently reach the other server.
     const why = ex.code === 'EADDRINUSE'
@@ -135,7 +165,7 @@ async function serve () {
     console.error(`cannot serve the web console: ${why}`)
     process.exit(1)
   }).listen(Number(options.port), '127.0.0.1', () => {
-    console.log(`web console: http://127.0.0.1:${options.port}${base} — API ${options.mock ? 'from the test fixture' : `proxied to ${options.server}`}`)
+    console.log(`web console: http://127.0.0.1:${options.port}${base} — /api ${options.mock ? `answered by a BFF on the test fixture (${api})` : `proxied to ${api}`}`)
   })
 }
 
@@ -145,6 +175,6 @@ if (positionals[0] === 'build') {
 } else if (positionals[0] === 'dev') {
   await serve()
 } else {
-  console.error('usage: node scripts/web.mjs build | dev [--server URL | --mock] [--port 5180] [--base /console/]')
+  console.error('usage: node scripts/web.mjs build | dev [--bff URL | --mock] [--port 5180] [--base /console/]')
   process.exitCode = 1
 }

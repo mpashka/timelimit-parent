@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import type { TimelimitApi } from '../core/api.ts'
-import type { SignInResult } from '../core/api.ts'
-import { hashParentPassword } from '../core/password.ts'
-import { createEmptyState, mergeServerStatus } from '../core/state.ts'
+import { apiBase, signIn } from './api.ts'
 import { errorText, type ErrorText } from './format.ts'
 import { browserTimeZone, ErrorBox, PasswordField } from './setup.tsx'
-import { type Auth, clearLocal, localStore, writeLocal } from './store.ts'
 import { serverLabel, SubmitButton, useBusy } from './ui.tsx'
 
 // @tag:parent-console
@@ -29,13 +25,7 @@ type Step =
   | { name: 'create', mailAuthToken: string, mail: string }
   | { name: 'closed', mail: string }
 
-const defaultDeviceName = (): string => {
-  const agent = navigator.userAgent
-  const model = /iPhone/.test(agent) ? 'iPhone' : /iPad/.test(agent) ? 'iPad' : /Android/.test(agent) ? 'Android' : 'браузер'
-  return `Веб-админка — ${model}`
-}
-
-export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi, googleClientId?: string, onSignedIn: (auth: Auth) => void }) {
+export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: string, onSignedIn: () => void }) {
   const [step, setStep] = useState<Step>({ name: 'mail' })
   const [error, setError] = useState<ErrorText | null>(null)
   const [phase, wrap] = useBusy()
@@ -50,17 +40,12 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
    * creation, so a new parent never meets "no family uses this mail".
    */
   const afterMailAuth = async (mailAuthToken: string) => {
-    const status = await api.getStatusByMailAuthToken({ mailAuthToken })
-    if (status.status === 'with family') await finish(await api.signInIntoFamily({ mailAuthToken, deviceName: defaultDeviceName() }))
-    else if (status.canCreateFamily) setStep({ name: 'create', mailAuthToken, mail: status.mail })
+    const status = await signIn.mailStatus(mailAuthToken)
+    if (status.status === 'with family') {
+      await signIn.session(mailAuthToken)
+      onSignedIn()
+    } else if (status.canCreateFamily) setStep({ name: 'create', mailAuthToken, mail: status.mail })
     else setStep({ name: 'closed', mail: status.mail })
-  }
-
-  const finish = async (result: SignInResult) => {
-    clearLocal()
-    writeLocal('auth', JSON.stringify({ deviceAuthToken: result.deviceAuthToken, ownDeviceId: result.ownDeviceId }))
-    await localStore.set('state', JSON.stringify(mergeServerStatus(createEmptyState(), result.data)))
-    onSignedIn({ deviceAuthToken: result.deviceAuthToken, ownDeviceId: result.ownDeviceId })
   }
 
   const restart = () => { setError(null); setCode(''); setStep({ name: 'mail' }) }
@@ -88,7 +73,8 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
     setError(null)
     void wrap(async () => {
       try {
-        await afterMailAuth(await api.signInByGoogle({ idToken, locale: 'ru' }))
+        const { mailAuthToken } = await signIn.byGoogle(idToken)
+        await afterMailAuth(mailAuthToken)
       } catch (ex) {
         failed(ex)
       }
@@ -98,12 +84,12 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
   return (
     <main class='page signin'>
       <h1>Веб-админка TimeLimit</h1>
-      <p class='muted small account'>Сервер {serverLabel(api.serverUrl)}</p>
+      <p class='muted small account'>Веб-админка {serverLabel(apiBase())}</p>
       {step.name === 'mail'
         ? (
           <>
             <form onSubmit={attempt(async () => {
-              const mailLoginToken = await api.sendMailLoginCode({ mail: mail.trim(), locale: 'ru' })
+              const { mailLoginToken } = await signIn.mailCode(mail.trim())
               setStep({ name: 'code', mail: mail.trim(), mailLoginToken })
             })}>
               <label>Почта родителя
@@ -118,7 +104,8 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
       {step.name === 'code'
         ? (
           <form onSubmit={attempt(async () => {
-            await afterMailAuth(await api.signInByMailCode({ mailLoginToken: step.mailLoginToken, receivedCode: code.trim() }))
+            const { mailAuthToken } = await signIn.byMailCode(step.mailLoginToken, code.trim())
+            await afterMailAuth(mailAuthToken)
           })}>
             <label>Код из письма на {step.mail} — три слова
               <input autocapitalize='off' autocomplete='one-time-code' autocorrect='off' spellcheck={false} required value={code} onInput={(e) => setCode(e.currentTarget.value)} />
@@ -131,13 +118,13 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
       {step.name === 'create'
         ? (
           <form onSubmit={attempt(async () => {
-            await finish(await api.createFamily({
+            await signIn.createFamily({
               mailAuthToken: step.mailAuthToken,
-              password: await hashParentPassword(password),
+              password,
               parentName: parentName.trim(),
-              deviceName: defaultDeviceName(),
               timeZone: browserTimeZone()
-            }))
+            })
+            onSignedIn()
           })}>
             <p>На {step.mail} семьи ещё нет — создадим.</p>
             <label>Ваше имя
@@ -158,7 +145,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
           )
         : null}
       <ErrorBox error={error} />
-      <p class='muted small'>Нет семьи — веб-админка создаст её. Есть — войдёт в неё ещё одним устройством родителя, без пароля; в списке устройств семьи он появится как «{defaultDeviceName()}». Выход — кнопка «Выйти» наверху.</p>
+      <p class='muted small'>Нет семьи — веб-админка создаст её. Есть — войдёт в неё под вами: устройством семьи веб-админка не становится, пароль родителя для входа не нужен. Выход — кнопка «Выйти» наверху.</p>
       <p class='muted small'>timelimit-parent, AGPL-3.0.</p>
     </main>
   )

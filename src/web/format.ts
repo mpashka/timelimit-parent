@@ -1,14 +1,24 @@
-import type { BanSpec } from '../core/bans.ts'
-import { ApiError, ParentConsoleError } from '../core/errors.ts'
-import { dailyLimitRules } from '../core/operations.ts'
-import type { Loophole } from '../core/overview.ts'
-import { ALL_DAYS, MINUTE_MAX } from '../core/protocol.ts'
-import type { CategoryView } from '../core/state.ts'
-import { formatClock, localTime, timestampAt } from '../core/time.ts'
+import { formatClock, localTime, timestampAt } from './time.ts'
 
 // @tag:parent-console
 
+export const ALL_DAYS = 127
+export const MINUTE_MAX = 24 * 60 - 1
+
 export const DAY_NAMES = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
+
+/** A ban as both the screens and the intents name it: from `start` to `end` inclusive on `days`. */
+export interface BanSpec {
+  days: number
+  start: number
+  end: number
+  hard: boolean
+}
+
+export interface Loophole {
+  kind: 'no-rule-now' | 'no-rules' | 'limits-disabled' | 'unassigned-apps-category'
+  categoryId: string
+}
 
 export function formatDuration (ms: number): string {
   const minutes = Math.max(Math.floor(ms / 60000), 0)
@@ -42,6 +52,8 @@ export const clockAfter = (endInclusive: number): string => endInclusive === MIN
 
 export const banLabel = (ban: BanSpec): string => `${formatClock(ban.start)}–${clockAfter(ban.end)}, ${formatDaysRu(ban.days)}`
 
+export const banKey = (ban: BanSpec): string => `${ban.days}-${ban.start}-${ban.end}-${ban.hard ? 'hard' : 'soft'}`
+
 /** When an active ban lets go: its end today, or tomorrow if now is in the evening part of an overnight ban. */
 export function banEndsAt (ban: BanSpec, now: number, timeZone: string): number {
   const local = localTime(now, timeZone)
@@ -64,9 +76,12 @@ export function dayLabel (dayOfEpoch: number): string {
   return `${weekday} ${String(date.getUTCDate()).padStart(2, '0')}.${String(date.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
+/** The time of day a stale view was still fresh, as the banner names it. */
+export const clockOf = (timestamp: number): string =>
+  new Date(timestamp).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
+
 /** Whole-day limit as the pult edits it: one number for all days, or `mixed` when the app set different ones. */
-export function dailyLimitOf (category: CategoryView): { minutes: number | null, mixed: boolean } {
-  const rules = dailyLimitRules(category)
+export function dailyLimitOf (rules: Array<{ maxTime: number, dayMask: number }>): { minutes: number | null, mixed: boolean } {
   if (rules.length === 0) return { minutes: null, mixed: false }
   const uniform = rules.length === 1 && rules[0].dayMask === ALL_DAYS
   return { minutes: Math.round(Math.min(...rules.map((r) => r.maxTime)) / 60000), mixed: !uniform }
@@ -84,21 +99,52 @@ export function loopholeText (loophole: Loophole, titles: Map<string, string>, n
 
 export const filterLines = (text: string): string[] => text.split('\n').map((s) => s.trim()).filter(Boolean)
 
+/**
+ * Why a request failed, as the BFF says it — split by what the person has to do about it.
+ * The browser no longer guesses it from the endpoint URL: `kind` is a field now
+ * (docs/implementation/web-admin.md, "Отказы").
+ */
+export type FailureKind =
+  | 'mail-auth-expired'
+  | 'session-gone'
+  | 'sync-unreachable'
+  | 'sync-rejected'
+  | 'not-supported'
+  | 'bad-request'
+  | 'internal'
+
+export interface Failure {
+  kind: FailureKind
+  title: string
+  hint?: string
+  signInAgain: boolean
+}
+
+export class BffError extends Error {
+  readonly failure: Failure
+
+  constructor (failure: Failure) {
+    super(failure.title)
+    this.name = 'BffError'
+    this.failure = failure
+  }
+}
+
 export interface ErrorText { title: string, hint?: string, signInAgain: boolean }
 
-/** 401 before the console has a device means the mail confirmation died, not that the family lost the console. */
-const MAIL_AUTH_ENDPOINTS = ['/auth/', '/parent/sign-in-into-family', '/parent/get-status-by-mail-address', '/parent/create-family']
-
 export function errorText (ex: unknown): ErrorText {
-  if (ex instanceof ApiError && ex.status === 401) {
-    if (MAIL_AUTH_ENDPOINTS.some((endpoint) => ex.endpoint.startsWith(endpoint))) {
-      return { title: 'Подтверждение почты больше не годится', hint: 'Оно одноразовое и живёт три часа — начните вход заново.', signInAgain: true }
-    }
-    return { title: 'Сервер не знает это устройство', hint: 'Веб-админку удалили из семьи или вход устарел — войдите заново.', signInAgain: true }
+  if (!(ex instanceof BffError)) return { title: ex instanceof Error ? ex.message : String(ex), signInAgain: false }
+  const { kind, title, hint, signInAgain } = ex.failure
+  switch (kind) {
+    case 'mail-auth-expired':
+      return { title: 'Подтверждение почты больше не годится', hint: 'Оно одноразовое и живёт три часа — начните вход заново.', signInAgain }
+    case 'session-gone':
+      return { title: 'Вход устарел', hint: 'Сессия родителя закрыта или истекла — войдите заново.', signInAgain }
+    case 'sync-unreachable':
+      return { title: 'Нет связи с сервером', hint: `Проверьте интернет и повторите; данные обновятся сами, когда связь вернётся. (${title})`, signInAgain }
+    case 'not-supported':
+      return { title: `Сервер этого не умеет: ${title}`, hint: hint ?? 'Обновите сервер синхронизации до ветки parent-console.', signInAgain }
+    default:
+      return { title, hint, signInAgain }
   }
-  if (ex instanceof ParentConsoleError && /cannot reach/.test(ex.message)) {
-    return { title: 'Нет связи с сервером', hint: `Проверьте интернет и повторите; данные обновятся сами, когда связь вернётся. (${ex.message})`, signInAgain: false }
-  }
-  if (ex instanceof ParentConsoleError) return { title: ex.message, hint: ex.hint, signInAgain: false }
-  return { title: ex instanceof Error ? ex.message : String(ex), signInAgain: false }
 }

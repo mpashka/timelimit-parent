@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'preact/hooks'
-import { type AddDeviceToken, TOKEN_LIFETIME_MS } from '../core/api.ts'
-import { addChild } from '../core/operations.ts'
-import { PARENT_PASSWORD_MIN_LENGTH } from '../core/password.ts'
-import type { FamilyState } from '../core/state.ts'
+import { type AddDeviceToken, createAddDeviceToken } from './api.ts'
 import { errorText, type ErrorText, formatCountdown } from './format.ts'
 import { SubmitButton, useApp, useBusy, type Work } from './ui.tsx'
 
 // @tag:parent-console
+
+/** `PasswordValidator.MINIMAL_CHAR_AMOUNT` of the child's device; the BFF checks it again. */
+export const PARENT_PASSWORD_MIN_LENGTH = 2
+
+/** The server drops an unused add-device token after three hours. */
+const TOKEN_LIFETIME_MS = 3 * 60 * 60 * 1000
 
 export const browserTimeZone = (): string => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 
@@ -35,23 +38,14 @@ export function PasswordField ({ value, onInput }: { value: string, onInput: (va
 }
 
 /** Shown instead of the console while the family has no child: the child's device needs one to be assigned to. */
-export function AddChildForm ({ run, onAdded }: { run: (work: Work) => Promise<boolean>, onAdded: (childId: string) => void }) {
+export function AddChildForm ({ run }: { run: (work: Work) => Promise<boolean> }) {
   const [name, setName] = useState('')
-  const [error, setError] = useState<ErrorText | null>(null)
   const [phase, wrap] = useBusy()
   return (
     <form onSubmit={(event) => {
       event.preventDefault()
-      setError(null)
       void wrap(async () => {
-        let plan: ReturnType<typeof addChild>
-        try {
-          plan = addChild({ name, timeZone: browserTimeZone() })
-        } catch (ex) {
-          setError(errorText(ex))
-          return
-        }
-        if (await run({ key: 'add-child', actions: plan.actions, done: `Ребёнок «${name.trim()}» добавлен` })) onAdded(plan.childId)
+        await run({ key: 'add-child', intent: 'child-add', body: { name, timeZone: browserTimeZone() }, done: `Ребёнок «${name.trim()}» добавлен` })
       })
     }}>
       <h1>Кого ограничиваем?</h1>
@@ -60,26 +54,21 @@ export function AddChildForm ({ run, onAdded }: { run: (work: Work) => Promise<b
       </label>
       <p class='muted small'>Появятся категории «Разрешено» и «Игры»; часовой пояс — {browserTimeZone()}. Потом на детском устройстве выберете этого ребёнка.</p>
       <SubmitButton phase={phase}>Добавить ребёнка</SubmitButton>
-      <ErrorBox error={error} />
     </form>
   )
 }
 
-const REFRESH_WHILE_WAITING_MS = 5000
-
 type TokenState = { name: 'loading' } | { name: 'failed', error: ErrorText } | { name: 'shown', token: AddDeviceToken, expiresAt: number }
 
-export function AddDevice ({ createToken, refresh, serverUrl }: {
-  createToken: () => Promise<AddDeviceToken>, refresh: () => Promise<FamilyState | null>, serverUrl: string
-}) {
-  const { state, child } = useApp()
+export function AddDevice ({ serverUrl }: { serverUrl: string }) {
+  const { family, child } = useApp()
   const [token, setToken] = useState<TokenState>({ name: 'loading' })
   const [now, setNow] = useState(Date.now())
   const [phase, wrap] = useBusy()
 
   const request = () => wrap(async () => {
     try {
-      const created = await createToken()
+      const created = await createAddDeviceToken()
       setToken({ name: 'shown', token: created, expiresAt: Date.now() + TOKEN_LIFETIME_MS })
     } catch (ex) {
       setToken({ name: 'failed', error: errorText(ex) })
@@ -89,11 +78,10 @@ export function AddDevice ({ createToken, refresh, serverUrl }: {
   useEffect(() => { void request() }, [])
   useEffect(() => {
     const clock = setInterval(() => setNow(Date.now()), 1000)
-    const poll = setInterval(() => { void refresh() }, REFRESH_WHILE_WAITING_MS)
-    return () => { clearInterval(clock); clearInterval(poll) }
+    return () => clearInterval(clock)
   }, [])
 
-  const joined = token.name === 'shown' ? state.devices.data.find((d) => d.deviceId === token.token.deviceId) : undefined
+  const joined = token.name === 'shown' ? family.devices.find((d) => d.deviceId === token.token.deviceId) : undefined
   const expired = token.name === 'shown' && now >= token.expiresAt
 
   return (

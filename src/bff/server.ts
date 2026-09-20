@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { TimelimitApi, TOKEN_LIFETIME_MS } from '../core/api.ts'
 import { ParentConsoleError } from '../core/errors.ts'
+import { hashParentPassword, PARENT_PASSWORD_MIN_LENGTH } from '../core/password.ts'
 import { type FamilyState, toClientStatus } from '../core/state.ts'
 import { SyncClient } from '../core/session.ts'
 import { describeFailure, SessionGoneError } from './failures.ts'
@@ -22,8 +23,11 @@ export interface BffOptions {
 }
 
 const COOKIE_NAME = 'tlp.session'
+/** Name of the device the sync server insists on creating together with a new family. */
+const CONSOLE_DEVICE_NAME = 'Веб-админка TimeLimit'
 const DEFAULT_POLL_MS = 30_000
 const DEFAULT_FAST_POLL_MS = 5_000
+const EVENT_HEARTBEAT_MS = 30_000
 
 interface Watcher {
   cookieId: string
@@ -127,6 +131,32 @@ export class Bff {
       const mailAuthToken = await this.api.signInByGoogle({ idToken: requireString(body, 'idToken'), locale: requireString(body, 'locale') })
       return send(response, 200, { mailAuthToken })
     }
+    if (step === 'create-family') {
+      const password = requireString(body, 'password')
+      if (password.length < PARENT_PASSWORD_MIN_LENGTH) {
+        throw new BadRequestError(`the parent password must have at least ${PARENT_PASSWORD_MIN_LENGTH} characters`)
+      }
+      // ponytail: the sync server creates a family only together with a first parent device, and
+      // `/parent/create-family` burns the mail token on the way, so there is nothing left to open a
+      // parent session with — this browser's session carries that device token instead. The ceiling
+      // is `/session/create-family` on the server, after which the BFF stops being a device here too.
+      const created = await this.api.createFamily({
+        mailAuthToken: requireString(body, 'mailAuthToken'),
+        password: await hashParentPassword(password),
+        parentName: requireString(body, 'parentName'),
+        deviceName: CONSOLE_DEVICE_NAME,
+        timeZone: requireString(body, 'timeZone')
+      })
+      const device = created.data.devices?.data.find((item) => item.deviceId === created.ownDeviceId)
+      const stored = this.store.createSession({
+        sessionToken: created.deviceAuthToken,
+        sessionId: created.ownDeviceId,
+        userId: device?.currentUserId ?? '',
+        familyId: ''
+      })
+      response.setHeader('Set-Cookie', cookie(COOKIE_NAME, stored.cookieId))
+      return send(response, 200, { userId: stored.userId, familyId: stored.familyId })
+    }
     if (step === 'session') {
       const result = await this.api.signInSession({ mailAuthToken: requireString(body, 'mailAuthToken') })
       const stored = this.store.createSession(result)
@@ -197,7 +227,14 @@ export class Bff {
     response.write(': connected\n\n')
     const watcher: Watcher = { cookieId: session.cookieId, response }
     this.watchers.add(watcher)
-    request.on('close', () => { this.watchers.delete(watcher) })
+    // nginx cuts a stream that says nothing for proxy_read_timeout (300 s here). EventSource would
+    // reconnect, but then every quiet five minutes costs a reconnect for nothing.
+    const beat = setInterval(() => response.write(': beat\n\n'), EVENT_HEARTBEAT_MS)
+    beat.unref()
+    request.on('close', () => {
+      clearInterval(beat)
+      this.watchers.delete(watcher)
+    })
   }
 
   private notify (cookieId: string): void {

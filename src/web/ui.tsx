@@ -1,23 +1,30 @@
 import { createContext, type ComponentChildren } from 'preact'
 import { useContext, useEffect, useRef, useState } from 'preact/hooks'
-import type { ParentAction } from '../core/protocol.ts'
-import type { FamilyState, User } from '../core/state.ts'
+import { type FamilyView, type Person, view } from './api.ts'
+import { errorText } from './format.ts'
 
 // @tag:parent-console
 
 export const WAIT_INDICATOR_DELAY_MS = 300
 
-export interface Work {
+/** What one button means, in the words of the BFF: an intent, and the intent that takes it back. */
+export interface IntentCall {
+  intent: string
+  body?: Record<string, unknown>
+}
+
+export interface Work extends IntentCall {
   key: string
-  actions: ParentAction[]
   done: string
-  undo?: (fresh: FamilyState) => ParentAction[]
+  /** Gets the freshest data of the open view, because an undo addresses what is there now. */
+  undo?: (fresh: unknown) => IntentCall
 }
 
 export interface AppContext {
-  state: FamilyState
-  child: User
+  family: FamilyView
+  child: Person
   now: number
+  view: unknown
   pending: { key: string, waiting: boolean } | null
   run: (work: Work) => Promise<boolean>
   showError: (ex: unknown) => void
@@ -25,6 +32,43 @@ export interface AppContext {
 
 export const App = createContext<AppContext>(null as unknown as AppContext)
 export const useApp = (): AppContext => useContext(App)
+
+/** The data of the screen's own view; every screen knows which one it asked for. */
+export const useScreen = <V, >(): V => useApp().view as V
+
+export interface ViewState<V> {
+  data: V | null
+  staleSince: number | null
+  problem: string | null
+  set: (data: V) => void
+}
+
+interface Loaded<V> { asked: string, data: V | null, staleSince: number | null, problem: string | null }
+
+const EMPTY = { data: null, staleSince: null, problem: null }
+
+/** Loads one view and reloads it whenever `revision` changes — a `changed` event, or the safety timer. */
+export function useView<V> (name: string | null, childId: string | undefined, revision: number, onFailure?: (ex: unknown) => void): ViewState<V> {
+  const asked = `${name ?? ''}?${childId ?? ''}`
+  const [state, setState] = useState<Loaded<V>>({ asked, ...EMPTY })
+  // What is on screen answers the question asked now: a reload keeps the data, a change of screen
+  // or of child does not — the previous answer belongs to another question.
+  const current = state.asked === asked ? state : { asked, ...EMPTY }
+  useEffect(() => {
+    if (name === null) return
+    let alive = true
+    void view<V>(name, childId).then(
+      (answer) => { if (alive) setState({ asked, data: answer.data, staleSince: answer.staleSince ?? null, problem: null }) },
+      (ex: unknown) => {
+        if (!alive) return
+        setState((previous) => ({ ...(previous.asked === asked ? previous : { asked, ...EMPTY }), problem: errorText(ex).title }))
+        onFailure?.(ex)
+      }
+    )
+    return () => { alive = false }
+  }, [name, childId, revision])
+  return { data: current.data, staleSince: current.staleSince, problem: current.problem, set: (data: V) => setState({ asked, data, staleSince: null, problem: null }) }
+}
 
 /** The host is what tells two servers apart; the scheme and path are the same everywhere. */
 export function serverLabel (serverUrl: string): string {
@@ -36,7 +80,7 @@ export function serverLabel (serverUrl: string): string {
 }
 
 /** Under whom and where the console acts — the two things a parent cannot check anywhere else. */
-export function Account ({ parent, serverUrl }: { parent: User | undefined, serverUrl: string }) {
+export function Account ({ parent, serverUrl }: { parent: Person | undefined, serverUrl: string }) {
   return (
     <div class='muted small account'>
       {parent

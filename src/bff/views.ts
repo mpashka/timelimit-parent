@@ -48,7 +48,7 @@ const viewBans = (context: ViewContext) => {
     child: overview.child,
     bans: overview.bans,
     legacyBans: overview.legacyBans,
-    categories: childCategories(context.state, childId).map(({ id, base }) => ({ id, title: base?.title ?? id }))
+    categories: childCategories(context.state, childId).map(({ id, base }) => ({ id, title: base?.title ?? id, parentId: base?.parentCategoryId || null }))
   }
 }
 

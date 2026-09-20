@@ -1,33 +1,25 @@
 import { useState } from 'preact/hooks'
-import {
-  allowCategoryUntil, allowChildUntil, grantExtraTime, lockChild, restoreTemporaryBlocks, revokeExtraTime, rootCategories, unlockChild
-} from '../core/operations.ts'
-import { type CategoryOverview, type ChildOverview, childOverview } from '../core/overview.ts'
-import { childCategories, type FamilyState } from '../core/state.ts'
+import type { Ban, CategoryNow, NowView } from './api.ts'
 import { banEndsAt, formatDuration, formatUntil } from './format.ts'
 import { countAdvancedOpened } from './store.ts'
-import { ActionButton, useApp } from './ui.tsx'
+import { ActionButton, useApp, useScreen } from './ui.tsx'
 
 // @tag:parent-console
 
 const GRANTS = [15, 30, 60]
 const MINUTE = 60000
 
-const categoryIn = (state: FamilyState, childId: string, id: string) => childCategories(state, childId).find((c) => c.id === id)
-
 export function Home () {
-  const { state, child, now } = useApp()
-  const overview = childOverview(state, child.id, now)
-  const devices = state.devices.data.filter((d) => d.currentUserId === child.id)
+  const view = useScreen<NowView>()
   return (
     <>
-      {devices.length === 0 ? <ChildDevices /> : null}
-      <ChildActions overview={overview} />
+      {view.devices.length === 0 ? <ChildDevices /> : null}
+      <ChildActions />
       <section class='list'>
-        {overview.categories.map((category) => <CategoryRow key={category.id} category={category} overview={overview} />)}
+        {view.categories.map((category) => <CategoryRow key={category.id} category={category} />)}
       </section>
-      {devices.length > 0 ? <ChildDevices /> : null}
-      {overview.unassignedApps === null
+      {view.devices.length > 0 ? <ChildDevices /> : null}
+      {view.unassignedApps === null
         ? <p class='muted small'>Новые приложения без категории здесь не видны: сервер отдаёт список установленных только зашифрованным.</p>
         : null}
     </>
@@ -36,10 +28,11 @@ export function Home () {
 
 /** Devices of the child and devices that joined but have no user yet; the entry to connecting another one. */
 function ChildDevices () {
-  const { state, child } = useApp()
-  const users = new Set(state.users.data.map((u) => u.id))
-  const own = state.devices.data.filter((d) => d.currentUserId === child.id)
-  const unassigned = state.devices.data.filter((d) => !users.has(d.currentUserId))
+  const { family, child } = useApp()
+  const view = useScreen<NowView>()
+  const users = new Set([...family.children, ...family.parents].map((person) => person.id))
+  const own = view.devices
+  const unassigned = family.devices.filter((device) => !users.has(device.currentUserId))
   return (
     <section class='card'>
       {own.length === 0
@@ -54,26 +47,31 @@ function ChildDevices () {
   )
 }
 
-function ChildActions ({ overview }: { overview: ChildOverview }) {
-  const { state, child, now } = useApp()
+function ChildActions () {
+  const { now } = useApp()
+  const view = useScreen<NowView>()
+  const child = view.child
   const tz = child.timeZone
-  const roots = rootCategories(state, child.id)
-  const rootViews = overview.categories.filter((c) => c.depth === 0)
-  const locked = rootViews.every((c) => c.temporarilyBlocked) ? rootViews : []
+  const rootViews = view.categories.filter((c) => c.depth === 0)
+  const locked = rootViews.length > 0 && rootViews.every((c) => c.temporarilyBlocked) ? rootViews : []
   const lockedUntil = locked.length > 0 && locked.every((c) => c.temporarilyBlocked!.until) ? Math.max(...locked.map((c) => c.temporarilyBlocked!.until!)) : null
   const allowedUntil = child.disableLimitsUntil > now ? child.disableLimitsUntil : null
 
+  // ponytail: undo of a lock lets every category go, where the old console put back exactly the
+  // blocks that were there before; one intent instead of a snapshot of the whole child
   const lock = (minutes: number | null) => () => ({
     key: `lock-${minutes}`,
-    actions: lockChild({ state, child, until: minutes ? now + minutes * MINUTE : undefined }),
+    intent: 'lock',
+    body: { until: minutes ? now + minutes * MINUTE : undefined },
     done: minutes ? `Заблокировано на ${formatDuration(minutes * MINUTE)}` : 'Заблокировано до снятия',
-    undo: () => restoreTemporaryBlocks(childCategories(state, child.id))
+    undo: () => ({ intent: 'lock', body: { off: true } })
   })
   const allowAll = (minutes: number) => () => ({
     key: `allow-all-${minutes}`,
-    actions: allowChildUntil(child, now + minutes * MINUTE),
+    intent: 'allow',
+    body: { until: now + minutes * MINUTE },
     done: `Всё разрешено на ${formatDuration(minutes * MINUTE)}`,
-    undo: () => allowChildUntil(child, child.disableLimitsUntil)
+    undo: () => ({ intent: 'allow', body: { until: child.disableLimitsUntil } })
   })
 
   return (
@@ -84,9 +82,10 @@ function ChildActions ({ overview }: { overview: ChildOverview }) {
             <span><b>Заблокировано</b> {lockedUntil ? formatUntil(lockedUntil, now, tz) : 'до снятия'}</span>
             <ActionButton class='primary' work={() => ({
               key: 'unlock',
-              actions: unlockChild({ state, child }),
+              intent: 'lock',
+              body: { off: true },
               done: 'Блокировка снята',
-              undo: () => restoreTemporaryBlocks(childCategories(state, child.id))
+              undo: () => ({ intent: 'lock', body: { until: lockedUntil ?? undefined } })
             })}>Разблокировать</ActionButton>
           </div>
           )
@@ -94,9 +93,9 @@ function ChildActions ({ overview }: { overview: ChildOverview }) {
           <div class='row'>
             <span>Заблокировать</span>
             <div class='chips'>
-              <ActionButton disabled={roots.length === 0} work={lock(30)}>30 мин</ActionButton>
-              <ActionButton disabled={roots.length === 0} work={lock(60)}>1 ч</ActionButton>
-              <ActionButton disabled={roots.length === 0} work={lock(null)}>до снятия</ActionButton>
+              <ActionButton disabled={rootViews.length === 0} work={lock(30)}>30 мин</ActionButton>
+              <ActionButton disabled={rootViews.length === 0} work={lock(60)}>1 ч</ActionButton>
+              <ActionButton disabled={rootViews.length === 0} work={lock(null)}>до снятия</ActionButton>
             </div>
           </div>
           )}
@@ -104,7 +103,7 @@ function ChildActions ({ overview }: { overview: ChildOverview }) {
         ? (
           <div class='row'>
             <span><b>Всё разрешено</b> {formatUntil(allowedUntil, now, tz)}</span>
-            <ActionButton work={() => ({ key: 'allow-all-off', actions: allowChildUntil(child, 0), done: 'Лимиты снова действуют', undo: () => allowChildUntil(child, allowedUntil) })}>Вернуть лимиты</ActionButton>
+            <ActionButton work={() => ({ key: 'allow-all-off', intent: 'allow', body: { until: 0 }, done: 'Лимиты снова действуют', undo: () => ({ intent: 'allow', body: { until: allowedUntil } }) })}>Вернуть лимиты</ActionButton>
           </div>
           )
         : (
@@ -121,29 +120,33 @@ function ChildActions ({ overview }: { overview: ChildOverview }) {
   )
 }
 
-function CategoryRow ({ category, overview }: { category: CategoryOverview, overview: ChildOverview }) {
-  const { state, child, now } = useApp()
+function CategoryRow ({ category }: { category: CategoryNow }) {
+  const { now } = useApp()
+  const view = useScreen<NowView>()
   const [allowing, setAllowing] = useState(false)
-  const tz = child.timeZone
-  const view = categoryIn(state, child.id, category.id)
-  if (!view) return null
-  const title = (id: string) => overview.categories.find((c) => c.id === id)?.title ?? id
+  const tz = view.child.timeZone
+  const title = (id: string) => view.categories.find((c) => c.id === id)?.title ?? id
   const remaining = category.remaining?.includingExtraTime ?? null
   const limit = category.limitNowMs
-  const activeBan = overview.bans.find((b) => b.activeNow && b.categoryIds.includes(category.id))
+  const activeBan: Ban | undefined = view.bans.find((ban) => ban.activeNow && ban.categoryIds.includes(category.id))
   const banned = category.blockedNow === 'ban' || category.blockedNow === 'legacy-blocked-time'
+  // ponytail: the view says until when limits are off, not whether that came from the category or
+  // from the whole child, so "вернуть" appears only when the category outlives the child's permit
+  const ownLimitsOff = category.limitsDisabledUntil !== null && category.limitsDisabledUntil > view.child.disableLimitsUntil
 
   const grant = (minutes: number) => () => ({
     key: `grant-${category.id}-${minutes}`,
-    actions: grantExtraTime({ state, category: view, minutes, now }),
+    intent: 'grant',
+    body: { category: category.id, minutes },
     done: `+${formatDuration(minutes * MINUTE)} к «${category.title}»`,
-    undo: (fresh: FamilyState) => revokeExtraTime({ state: fresh, category: categoryIn(fresh, child.id, category.id) ?? view, minutes, now: Date.now() })
+    undo: () => ({ intent: 'grant', body: { category: category.id, minutes: -minutes } })
   })
   const allowFor = (until: number, label: string) => () => ({
     key: `allow-${category.id}-${label}`,
-    actions: allowCategoryUntil(view, until),
+    intent: 'allow',
+    body: { category: category.id, until },
     done: `«${category.title}» разрешено ${formatUntil(until, now, tz)}`,
-    undo: () => allowCategoryUntil(view, view.base.dlu)
+    undo: () => ({ intent: 'allow', body: { category: category.id, until: 0 } })
   })
 
   return (
@@ -167,9 +170,10 @@ function CategoryRow ({ category, overview }: { category: CategoryOverview, over
             <span class='chip warn'>заблокировано {category.temporarilyBlocked.until ? formatUntil(category.temporarilyBlocked.until, now, tz) : 'до снятия'}
               <ActionButton class='link' work={() => ({
                 key: `unblock-${category.id}`,
-                actions: [{ type: 'UPDATE_CATEGORY_TEMPORARILY_BLOCKED', categoryId: category.id, blocked: false }],
+                intent: 'lock',
+                body: { category: category.id, off: true },
                 done: `«${category.title}» разблокировано`,
-                undo: () => restoreTemporaryBlocks([view])
+                undo: () => ({ intent: 'lock', body: { category: category.id, until: category.temporarilyBlocked?.until ?? undefined } })
               })}>снять</ActionButton>
             </span>
             )
@@ -180,8 +184,8 @@ function CategoryRow ({ category, overview }: { category: CategoryOverview, over
         {category.limitsDisabledUntil
           ? (
             <span class='chip'>лимиты сняты {formatUntil(category.limitsDisabledUntil, now, tz)}
-              {view.base.dlu > now
-                ? <ActionButton class='link' work={() => ({ key: `relimit-${category.id}`, actions: allowCategoryUntil(view, 0), done: `Лимиты «${category.title}» снова действуют`, undo: () => allowCategoryUntil(view, view.base.dlu) })}>вернуть</ActionButton>
+              {ownLimitsOff
+                ? <ActionButton class='link' work={() => ({ key: `relimit-${category.id}`, intent: 'allow', body: { category: category.id, until: 0 }, done: `Лимиты «${category.title}» снова действуют`, undo: () => ({ intent: 'allow', body: { category: category.id, until: category.limitsDisabledUntil } }) })}>вернуть</ActionButton>
                 : null}
             </span>
             )

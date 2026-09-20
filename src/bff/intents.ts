@@ -1,8 +1,8 @@
 import { addBanActions, type BanSpec, removeBanActions, replaceBanActions } from '../core/bans.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import {
-  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp,
-  revokeExtraTime, setDailyLimit, setUrlFilter, unlockChild
+  addChild, allowCategoryUntil, allowChildUntil, blockCategory, grantExtraTime, limitApp, lockChild,
+  moveApp, revokeExtraTime, setDailyLimit, setUrlFilter, undoLimitApp, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild } from '../core/overview.ts'
 import { ALL_DAYS, type ParentAction, type UrlFilter } from '../core/protocol.ts'
@@ -102,6 +102,9 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
 
   lock: (context, body) => {
     const target = child(context, body)
+    if (optionalStr(body, 'category')) {
+      return blockCategory({ category: category(context, body, target.id), blocked: body.off !== true, until: optionalNum(body, 'until') })
+    }
     return body.off === true
       ? unlockChild({ state: context.state, child: target })
       : lockChild({ state: context.state, child: target, until: optionalNum(body, 'until') })
@@ -147,14 +150,22 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
     return setDailyLimit({ category: category(context, body, childId), minutes, days: optionalNum(body, 'days') ?? ALL_DAYS })
   },
 
-  'limit-app': (context, body) => limitApp({
-    state: context.state,
-    childId: child(context, body).id,
-    packageName: str(body, 'package'),
-    minutes: num(body, 'minutes'),
-    title: optionalStr(body, 'title') ?? str(body, 'package'),
-    days: optionalNum(body, 'days') ?? ALL_DAYS
-  }),
+  'limit-app': (context, body) => {
+    const childId = child(context, body).id
+    const packageName = str(body, 'package')
+    if (body.undo === true) {
+      const previous = optionalStr(body, 'category')
+      return undoLimitApp({ state: context.state, childId, packageName, previousCategoryId: previous ? category(context, body, childId).id : null })
+    }
+    return limitApp({
+      state: context.state,
+      childId,
+      packageName,
+      minutes: num(body, 'minutes'),
+      title: optionalStr(body, 'title') ?? packageName,
+      days: optionalNum(body, 'days') ?? ALL_DAYS
+    })
+  },
 
   'app-move': (context, body) => {
     const childId = child(context, body).id

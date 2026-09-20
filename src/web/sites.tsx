@@ -1,30 +1,28 @@
 import { useState } from 'preact/hooks'
-import { setUrlFilter } from '../core/operations.ts'
-import { URL_FILTER_API_LEVEL, type UrlFilter } from '../core/protocol.ts'
-import { errorText, filterLines } from './format.ts'
-import { ActionButton, SubmitButton, useApp, useBusy } from './ui.tsx'
+import type { SitesView, UrlFilter } from './api.ts'
+import { filterLines } from './format.ts'
+import { ActionButton, SubmitButton, useApp, useBusy, useScreen } from './ui.tsx'
 
 // @tag:parent-console
 
-const EMPTY: UrlFilter = { enabled: false, allow: [], block: [] }
-
 export function Sites () {
-  const { state, child, run } = useApp()
-  const saved = child.urlFilter ?? EMPTY
+  const { child, family, run } = useApp()
+  const view = useScreen<SitesView>()
+  const saved = view.urlFilter
   const [allow, setAllow] = useState<string | null>(null)
   const [block, setBlock] = useState<string | null>(null)
-  const [problem, setProblem] = useState<string | null>(null)
   const [phase, wrap] = useBusy()
-  const supported = state.apiLevel >= URL_FILTER_API_LEVEL
+  const supported = view.supported
   const allowText = allow ?? saved.allow.join('\n')
   const blockText = block ?? saved.block.join('\n')
   const dirty = allowText !== saved.allow.join('\n') || blockText !== saved.block.join('\n')
 
   const work = (filter: UrlFilter, key: string, done: string) => ({
     key,
-    actions: setUrlFilter({ state, childId: child.id, filter }),
+    intent: 'filter-set',
+    body: { filter },
     done,
-    undo: () => setUrlFilter({ state, childId: child.id, filter: saved })
+    undo: () => ({ intent: 'filter-set', body: { filter: saved } })
   })
 
   return (
@@ -32,7 +30,7 @@ export function Sites () {
       {!supported
         ? (
           <div class='error' role='alert'>
-            <div>Сервер не умеет фильтр сайтов: у него apiLevel {state.apiLevel}, нужен {URL_FILTER_API_LEVEL}.</div>
+            <div>Сервер не умеет фильтр сайтов: у него apiLevel {family.apiLevel}.</div>
             <div class='muted'>Старый сервер молча выбросит настройку. Обновите сервер до ветки parent-console — экран заработает сам.</div>
           </div>
           )
@@ -50,14 +48,7 @@ export function Sites () {
       <form class='card form' onSubmit={(event) => {
         event.preventDefault()
         const filter = { enabled: saved.enabled, allow: filterLines(allowText), block: filterLines(blockText) }
-        let item
-        try {
-          item = work(filter, 'filter-lists', 'Списки сайтов сохранены')
-        } catch (ex) {
-          setProblem(errorText(ex).title)
-          return
-        }
-        setProblem(null)
+        const item = work(filter, 'filter-lists', 'Списки сайтов сохранены')
         void wrap(async () => { if (await run(item)) { setAllow(null); setBlock(null) } })
       }}>
         <p class='muted small'>
@@ -71,12 +62,11 @@ export function Sites () {
         <label>Запрещённые
           <textarea rows={5} disabled={!supported} value={blockText} placeholder={'google.com/search\nyoutube.com'} onInput={(e) => setBlock(e.currentTarget.value)} />
         </label>
-        {problem ? <p class='error'>{problem}</p> : null}
         {dirty
           ? (
             <div class='chips'>
               <SubmitButton phase={phase} disabled={!supported}>Сохранить списки</SubmitButton>
-              <button type='button' onClick={() => { setAllow(null); setBlock(null); setProblem(null) }}>Отмена</button>
+              <button type='button' onClick={() => { setAllow(null); setBlock(null) }}>Отмена</button>
             </div>
             )
           : null}

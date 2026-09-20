@@ -56,10 +56,14 @@ export const rootCategories = (state: FamilyState, childId: string): CategoryVie
   return categories.filter((c) => !categories.some((p) => p.id === c.base.parentCategoryId))
 }
 
+export function blockCategory ({ category, blocked, until }: { category: CategoryView, blocked: boolean, until?: number }): ParentAction[] {
+  return [{ type: 'UPDATE_CATEGORY_TEMPORARILY_BLOCKED', categoryId: category.id, blocked, ...(blocked && until ? { endTime: Math.round(until) } : {}) }]
+}
+
 export function lockChild ({ state, child, until }: { state: FamilyState, child: User, until?: number }): ParentAction[] {
   const roots = rootCategories(state, child.id)
   if (roots.length === 0) throw new ParentConsoleError(`${child.name} has no categories to lock`)
-  return roots.map((c) => ({ type: 'UPDATE_CATEGORY_TEMPORARILY_BLOCKED', categoryId: c.id, blocked: true, ...(until ? { endTime: Math.round(until) } : {}) }))
+  return roots.flatMap((category) => blockCategory({ category, blocked: true, until }))
 }
 
 export function unlockChild ({ state, child }: { state: FamilyState, child: User }): ParentAction[] {
@@ -143,12 +147,25 @@ export function limitApp ({ state, childId, packageName, minutes, title, days = 
   return actions
 }
 
-/** Undo of `limitApp`: the app goes back to `previousCategoryId` and the created sub-category is deleted. */
-export function undoLimitApp ({ actions, packageName, previousCategoryId }: { actions: ParentAction[], packageName: string, previousCategoryId: string | null }): ParentAction[] {
-  const created = actions.find((a) => a.type === 'CREATE_CATEGORY')
-  if (!created) throw new ParentConsoleError('these actions did not create a category')
+/**
+ * Undo of `limitApp`: the app goes back to `previousCategoryId` and the sub-category that `limitApp`
+ * made for it is deleted. The sub-category is found in the state — the caller of an undo holds the
+ * fresh family, not the actions of the change — and it is only deleted while it still looks like
+ * one: the app alone in a child of the category it came from.
+ */
+export function undoLimitApp ({ state, childId, packageName, previousCategoryId }: {
+  state: FamilyState, childId: string, packageName: string, previousCategoryId: string | null
+}): ParentAction[] {
+  const holder = childCategories(state, childId).find((c) => c.apps.includes(packageName))
+  if (!holder) throw new ParentConsoleError(`${packageName} is not in any category`)
+  if (holder.apps.length !== 1 || (previousCategoryId !== null && holder.base.parentCategoryId !== previousCategoryId)) {
+    throw new ParentConsoleError(
+      `"${holder.base.title}" is not the sub-category made for ${packageName} any more`,
+      'the app or its category changed after the limit was set — undo it by hand'
+    )
+  }
   const back: ParentAction[] = previousCategoryId ? [{ type: 'ADD_CATEGORY_APPS', categoryId: previousCategoryId, packageNames: [packageName] }] : []
-  return [...back, { type: 'DELETE_CATEGORY', categoryId: created.categoryId }]
+  return [...back, { type: 'DELETE_CATEGORY', categoryId: holder.id }]
 }
 
 export function validateUrlFilter (filter: UrlFilter): void {

@@ -1,42 +1,44 @@
 import { useState } from 'preact/hooks'
-import { addBanActions, type Ban, banKey, type BanSpec, createdRuleIds, removeBanActions, replaceBanActions } from '../core/bans.ts'
-import { childOverview } from '../core/overview.ts'
-import { ALL_DAYS, MINUTE_MAX } from '../core/protocol.ts'
-import { type CategoryView, childCategories, type FamilyState } from '../core/state.ts'
-import { formatClock, parseClock } from '../core/time.ts'
-import { banLabel, clockAfter, DAY_NAMES } from './format.ts'
-import { ActionButton, SubmitButton, useApp, useBusy, type Work } from './ui.tsx'
+import type { Ban, BansView } from './api.ts'
+import { ALL_DAYS, type BanSpec, banKey, banLabel, clockAfter, DAY_NAMES, MINUTE_MAX } from './format.ts'
+import { formatClock, parseClock } from './time.ts'
+import { ActionButton, SubmitButton, useApp, useBusy, useScreen, type Work } from './ui.tsx'
 
 // @tag:parent-console
 
-const categoriesOf = (state: FamilyState, childId: string) => childCategories(state, childId)
+const specOf = ({ days, start, end, hard }: BanSpec): BanSpec => ({ days, start, end, hard })
+
+/** An undo addresses the ban by its place in the list, so it is looked up again in the fresh view. */
+function indexOfBan (fresh: unknown, spec: BanSpec): number {
+  const index = (fresh as BansView).bans.findIndex((ban) => banKey(ban) === banKey(spec))
+  if (index < 0) throw new Error(`Запрет ${banLabel(spec)} уже изменился — отменять нечего`)
+  return index
+}
 
 export function Bans () {
-  const { state, child, now } = useApp()
+  const view = useScreen<BansView>()
   const [editing, setEditing] = useState<string | null>(null)
-  const overview = childOverview(state, child.id, now)
-  const categories = categoriesOf(state, child.id)
-  const title = (id: string) => categories.find((c) => c.id === id)?.base.title ?? id
+  const title = (id: string) => view.categories.find((c) => c.id === id)?.title ?? id
 
   return (
     <>
       <p class='muted small'>Запрет «с–до» по дням на выбранные категории. <b>Жёсткий</b> — доп. время не помогает, <b>мягкий</b> — «+N минут» его обходит. Снять на время — «разрешить…» на экране «Сейчас».</p>
       {editing === 'new'
-        ? <BanForm categories={categories} onClose={() => setEditing(null)} />
+        ? <BanForm categories={view.categories} onClose={() => setEditing(null)} />
         : <button type='button' class='primary wide' onClick={() => setEditing('new')}>Добавить запрет</button>}
-      {overview.bans.length === 0 ? <p class='muted'>Запретов пока нет.</p> : null}
-      {overview.bans.map((ban) => {
+      {view.bans.length === 0 ? <p class='muted'>Запретов пока нет.</p> : null}
+      {view.bans.map((ban, index) => {
         const key = banKey(ban)
         return editing === key
-          ? <BanForm key={key} categories={categories} ban={ban} onClose={() => setEditing(null)} />
-          : <BanCard key={key} ban={ban} categories={categories} onEdit={() => setEditing(key)} />
+          ? <BanForm key={key} categories={view.categories} ban={ban} index={index} onClose={() => setEditing(null)} />
+          : <BanCard key={key} ban={ban} index={index} categories={view.categories} onEdit={() => setEditing(key)} />
       })}
-      {overview.legacyBans.length > 0
+      {view.legacyBans.length > 0
         ? (
           <section class='card'>
             <h2>Из старой настройки приложения</h2>
             <p class='muted small'>Заблокированное время, заданное в приложении старым способом; веб-админка его показывает, но правится оно в приложении.</p>
-            {overview.legacyBans.map((ban) => <div key={banKey(ban)}>{banLabel(ban)} — {ban.categoryIds.map(title).join(', ')}</div>)}
+            {view.legacyBans.map((ban) => <div key={banKey(ban)}>{banLabel(ban)} — {ban.categoryIds.map(title).join(', ')}</div>)}
           </section>
           )
         : null}
@@ -44,9 +46,10 @@ export function Bans () {
   )
 }
 
-function BanCard ({ ban, categories, onEdit }: { ban: Ban & { activeNow: boolean }, categories: CategoryView[], onEdit: () => void }) {
-  const { child, pending, run } = useApp()
+function BanCard ({ ban, index, categories, onEdit }: { ban: Ban, index: number, categories: BansView['categories'], onEdit: () => void }) {
+  const { pending, run } = useApp()
   const label = banLabel(ban)
+  const spec = specOf(ban)
   return (
     <article class='card'>
       <div class='row'>
@@ -60,30 +63,36 @@ function BanCard ({ ban, categories, onEdit }: { ban: Ban & { activeNow: boolean
         {categories.map((category) => {
           const on = ban.categoryIds.includes(category.id)
           const key = `ban-${banKey(ban)}-${category.id}`
-          const toggle = (): Work => {
-            if (on) {
-              return {
+          const without = ban.categoryIds.filter((id) => id !== category.id)
+          const toggle = (): Work => on
+            ? {
                 key,
-                actions: removeBanActions(ban, [category.id]),
-                done: `«${category.base.title}» убрано из запрета ${label}`,
-                undo: (fresh) => addBanActions(categoriesOf(fresh, child.id).filter((c) => c.id === category.id), ban)
+                ...(without.length === 0
+                  ? { intent: 'ban-remove', body: { index } }
+                  : { intent: 'ban-replace', body: { index, ...spec, categories: without } }),
+                done: `«${category.title}» убрано из запрета ${label}`,
+                undo: () => ({ intent: 'ban-add', body: { categories: [category.id], ...spec } })
               }
-            }
-            const actions = addBanActions([category], ban)
-            return {
-              key,
-              actions,
-              done: `«${category.base.title}» добавлено в запрет ${label}`,
-              undo: (fresh) => replaceBanActions({ categories: categoriesOf(fresh, child.id), removeRuleIds: createdRuleIds(actions), ban, categoryIds: [] })
-            }
-          }
+            : {
+                key,
+                intent: 'ban-add',
+                body: { categories: [category.id], ...spec },
+                done: `«${category.title}» добавлено в запрет ${label}`,
+                undo: (fresh) => {
+                  const at = indexOfBan(fresh, spec)
+                  const rest = (fresh as BansView).bans[at].categoryIds.filter((id) => id !== category.id)
+                  return rest.length === 0
+                    ? { intent: 'ban-remove', body: { index: at } }
+                    : { intent: 'ban-replace', body: { index: at, ...spec, categories: rest } }
+                }
+              }
           return (
             <label key={category.id} class={`check ${pending?.key === key ? 'pressed' : ''}`}>
               <input type='checkbox' checked={on} disabled={pending?.key === key} onChange={(event) => {
                 event.currentTarget.checked = on
                 void run(toggle())
               }} />
-              {category.base.title}
+              {category.title}
               {pending?.key === key && pending.waiting ? <span class='spinner' aria-hidden='true' /> : null}
             </label>
           )
@@ -93,44 +102,47 @@ function BanCard ({ ban, categories, onEdit }: { ban: Ban & { activeNow: boolean
         <button type='button' onClick={onEdit}>Изменить</button>
         <ActionButton work={() => ({
           key: `ban-delete-${banKey(ban)}`,
-          actions: removeBanActions(ban),
+          intent: 'ban-remove',
+          body: { index },
           done: `Запрет ${label} удалён`,
-          undo: (fresh) => replaceBanActions({ categories: categoriesOf(fresh, child.id), removeRuleIds: [], ban, categoryIds: ban.categoryIds })
+          undo: () => ({ intent: 'ban-add', body: { categories: ban.categoryIds, ...spec } })
         })}>Удалить</ActionButton>
       </div>
     </article>
   )
 }
 
-function BanForm ({ categories, ban, onClose }: { categories: CategoryView[], ban?: Ban, onClose: () => void }) {
-  const { run, child } = useApp()
+function BanForm ({ categories, ban, index, onClose }: { categories: BansView['categories'], ban?: Ban, index?: number, onClose: () => void }) {
+  const { run } = useApp()
   const [phase, wrap] = useBusy()
   const [from, setFrom] = useState(formatClock(ban?.start ?? 21 * 60))
   const [to, setTo] = useState(ban ? clockAfter(ban.end).replace('24:00', '00:00') : '07:00')
   const [days, setDays] = useState(ban?.days ?? ALL_DAYS)
   const [hard, setHard] = useState(ban?.hard ?? true)
-  const [selected, setSelected] = useState<string[]>(ban?.categoryIds ?? categories.filter((c) => !categories.some((p) => p.id === c.base.parentCategoryId)).map((c) => c.id))
+  const [selected, setSelected] = useState<string[]>(ban?.categoryIds ?? categories.filter((c) => !categories.some((p) => p.id === c.parentId)).map((c) => c.id))
   const problem = days === 0 ? 'Отметьте хотя бы один день.' : selected.length === 0 ? 'Отметьте хотя бы одну категорию.' : null
 
   const submit = (event: Event) => {
     event.preventDefault()
     if (problem) return
     const spec: BanSpec = { days, start: parseClock(from) % 1440, end: (parseClock(to) + MINUTE_MAX) % 1440, hard }
-    const actions = replaceBanActions({ categories, removeRuleIds: ban ? ban.ruleRefs.map((r) => r.ruleId) : [], ban: spec, categoryIds: selected })
-    void wrap(async () => {
-      const ok = await run({
-        key: 'ban-form',
-        actions,
-        done: `Запрет ${banLabel(spec)} ${ban ? 'сохранён' : 'добавлен'}`,
-        undo: (fresh) => replaceBanActions({
-          categories: categoriesOf(fresh, child.id),
-          removeRuleIds: createdRuleIds(actions),
-          ban: ban ?? spec,
-          categoryIds: ban ? ban.categoryIds : []
-        })
-      })
-      if (ok) onClose()
-    })
+    const done = `Запрет ${banLabel(spec)} ${ban ? 'сохранён' : 'добавлен'}`
+    const work: Work = ban && index !== undefined
+      ? {
+          key: 'ban-form',
+          intent: 'ban-replace',
+          body: { index, ...spec, categories: selected },
+          done,
+          undo: (fresh) => ({ intent: 'ban-replace', body: { index: indexOfBan(fresh, spec), ...specOf(ban), categories: ban.categoryIds } })
+        }
+      : {
+          key: 'ban-form',
+          intent: 'ban-add',
+          body: { categories: selected, ...spec },
+          done,
+          undo: (fresh) => ({ intent: 'ban-remove', body: { index: indexOfBan(fresh, spec) } })
+        }
+    void wrap(async () => { if (await run(work)) onClose() })
   }
 
   return (
@@ -151,7 +163,7 @@ function BanForm ({ categories, ban, onClose }: { categories: CategoryView[], ba
         {categories.map((category) => (
           <label key={category.id} class='check'>
             <input type='checkbox' checked={selected.includes(category.id)} onChange={(e) => setSelected(e.currentTarget.checked ? [...selected, category.id] : selected.filter((id) => id !== category.id))} />
-            {category.base.title}
+            {category.title}
           </label>
         ))}
       </div>

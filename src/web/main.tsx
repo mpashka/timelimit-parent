@@ -1,21 +1,22 @@
 import { render } from 'preact'
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks'
-import type { TimelimitApi } from '../core/api.ts'
-import { children, type FamilyState, findParentOfDevice } from '../core/state.ts'
+import { useEffect, useRef, useState } from 'preact/hooks'
+import { type FamilyView, intent, listenChanged, loadWebConfig, signOut, type WebConfig } from './api.ts'
 import { Bans } from './bans.tsx'
-import { errorText } from './format.ts'
+import { clockOf, errorText } from './format.ts'
 import { History } from './history.tsx'
 import { Home } from './home.tsx'
 import { CategoryDetails, Limits } from './limits.tsx'
 import { AddChildForm, AddDevice } from './setup.tsx'
 import { SignIn } from './signin.tsx'
 import { Sites } from './sites.tsx'
-import { type Auth, clearLocal, Connection, createApi, loadWebConfig, readAuth, readLocal, type WebConfig, writeLocal } from './store.ts'
-import { Account, App, type AppContext, Toast, type ToastMessage, WAIT_INDICATOR_DELAY_MS, type Work } from './ui.tsx'
+import { clearLocal, forgetLegacySecrets, readLocal, writeLocal } from './store.ts'
+import { Account, App, type AppContext, type IntentCall, Toast, type ToastMessage, useView, WAIT_INDICATOR_DELAY_MS, type Work } from './ui.tsx'
 
 // @tag:parent-console
 
-const POLL_MS = 30000
+/** The page is told about changes, so this is only a safety net for an event stream that died quietly. */
+const SAFETY_RELOAD_MS = 5 * 60 * 1000
+const CLOCK_MS = 30000
 
 const tabs = [
   { path: '', title: 'Сейчас' },
@@ -24,6 +25,8 @@ const tabs = [
   { path: 'history', title: 'История' },
   { path: 'sites', title: 'Сайты' }
 ]
+
+const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', limits: 'limits', history: 'history', sites: 'sites', device: null }
 
 const currentRoute = () => location.hash.replace(/^#\/?/, '')
 
@@ -37,70 +40,96 @@ function useRoute (): string {
   return route
 }
 
-function Root ({ config, api }: { config: WebConfig, api: TimelimitApi }) {
-  const [auth, setAuth] = useState<Auth | null>(readAuth())
-  if (!auth) return <SignIn api={api} googleClientId={config.googleClientId} onSignedIn={setAuth} />
-  return <Console api={api} auth={auth} onSignOut={() => { clearLocal(); setAuth(null) }} />
-}
+function Root ({ config }: { config: WebConfig }) {
+  const [signedOut, setSignedOut] = useState(false)
+  const [revision, setRevision] = useState(0)
+  const reload = () => setRevision((value) => value + 1)
+  const family = useView<FamilyView>(signedOut ? null : 'family', undefined, revision, (ex) => {
+    if (errorText(ex).signInAgain) setSignedOut(true)
+  })
 
-function Console ({ api, auth, onSignOut }: { api: TimelimitApi, auth: Auth, onSignOut: () => void }) {
-  const connection = useMemo(() => new Connection(api, auth), [auth.deviceAuthToken])
-  const [state, setState] = useState<FamilyState | null>(null)
-  const [now, setNow] = useState(Date.now())
-  const [syncProblem, setSyncProblem] = useState<string | null>(null)
-  const [pending, setPending] = useState<AppContext['pending']>(null)
-  const [toast, setToast] = useState<ToastMessage | null>(null)
-  const [childId, setChildId] = useState(readLocal('child'))
-  const route = useRoute()
-  const toastId = useRef(0)
+  useEffect(() => {
+    if (signedOut) return
+    const stop = listenChanged(reload)
+    const safety = setInterval(reload, SAFETY_RELOAD_MS)
+    const onVisible = () => { if (document.visibilityState === 'visible') reload() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { stop(); clearInterval(safety); document.removeEventListener('visibilitychange', onVisible) }
+  }, [signedOut])
 
-  const applyState = (fresh: FamilyState) => {
-    setState(fresh)
-    setNow(Date.now())
-    setSyncProblem(null)
-  }
-
-  const showError = (ex: unknown) => {
-    const text = errorText(ex)
-    setToast({ id: ++toastId.current, kind: 'error', text: text.title, hint: text.hint, signInAgain: text.signInAgain ? onSignOut : undefined })
-  }
-
-  const refresh = async (): Promise<FamilyState | null> => {
+  const leave = async () => {
     try {
-      const fresh = await connection.refresh()
-      applyState(fresh)
-      return fresh
-    } catch (ex) {
-      const text = errorText(ex)
-      if (text.signInAgain) showError(ex)
-      setSyncProblem(text.title)
-      return null
+      await signOut()
+    } finally {
+      clearLocal()
+      setSignedOut(true)
     }
   }
 
-  useEffect(() => { setToast((current) => current?.kind === 'done' ? null : current) }, [route])
+  if (signedOut) return <SignIn googleClientId={config.googleClientId} onSignedIn={() => { setSignedOut(false); reload() }} />
+  if (!family.data) {
+    return (
+      <main class='page'>
+        <p class='muted'>{family.problem ? `Не удалось загрузить семью: ${family.problem}` : 'Загружаем семью…'}</p>
+        {family.problem ? <button type='button' onClick={reload}>Повторить</button> : null}
+        <button type='button' class='link' onClick={() => void leave()}>Выйти</button>
+      </main>
+    )
+  }
+  return <Console family={family.data} familyStale={family.staleSince} revision={revision} reload={reload} leave={leave} />
+}
+
+function Console ({ family, familyStale, revision, reload, leave }: {
+  family: FamilyView, familyStale: number | null, revision: number, reload: () => void, leave: () => Promise<void>
+}) {
+  const route = useRoute()
+  const [childId, setChildId] = useState(readLocal('child') ?? '')
+  const [now, setNow] = useState(Date.now())
+  const [pending, setPending] = useState<AppContext['pending']>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
+  const toastId = useRef(0)
+
+  const [requested, argument] = route.split('/')
+  const screen = ['bans', 'limits', 'history', 'sites', 'category', 'device'].includes(requested) ? requested : ''
+  const kids = family.children
+  const child = kids.find((kid) => kid.id === childId) ?? kids[0]
+  const viewName = child === undefined ? null : screen === 'category' ? `category/${argument ?? ''}` : screenViews[screen] ?? null
+  const screenView = useView<unknown>(viewName, child?.id, revision)
+  const latest = useRef<unknown>(null)
+  latest.current = screenView.data
 
   useEffect(() => {
-    void connection.cached().then((cached) => { if (cached.users.data.length > 0) setState(cached) })
-    void refresh()
-    const timer = setInterval(() => { if (document.visibilityState === 'visible') void refresh() }, POLL_MS)
-    const onVisible = () => { if (document.visibilityState === 'visible') void refresh() }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', onVisible) }
-  }, [connection])
+    const clock = setInterval(() => setNow(Date.now()), CLOCK_MS)
+    return () => clearInterval(clock)
+  }, [])
+  useEffect(() => { setNow(Date.now()) }, [revision])
+  useEffect(() => { setToast((current) => current?.kind === 'done' ? null : current) }, [route])
+
+  const showError = (ex: unknown) => {
+    const text = errorText(ex)
+    setToast({ id: ++toastId.current, kind: 'error', text: text.title, hint: text.hint, signInAgain: text.signInAgain ? () => void leave() : undefined })
+  }
+
+  const runUndo = (undo: (fresh: unknown) => IntentCall) => {
+    let call: IntentCall
+    try {
+      call = undo(latest.current)
+    } catch (ex) {
+      showError(ex)
+      return
+    }
+    void run({ key: 'undo', ...call, done: 'Отменено' })
+  }
 
   const run = async (work: Work): Promise<boolean> => {
     setPending({ key: work.key, waiting: false })
     const timer = setTimeout(() => setPending({ key: work.key, waiting: true }), WAIT_INDICATOR_DELAY_MS)
     try {
-      applyState(await connection.push(work.actions))
+      const answer = await intent(work.intent, { child: child?.id, ...work.body, ...(viewName === null ? {} : { view: viewName }) })
+      if (answer.data === undefined) reload()
+      else screenView.set(answer.data)
       const undo = work.undo
-      setToast({
-        id: ++toastId.current,
-        kind: 'done',
-        text: work.done,
-        undo: undo && (() => { void runUndo(undo) })
-      })
+      setToast({ id: ++toastId.current, kind: 'done', text: work.done, undo: undo && (() => runUndo(undo)) })
       return true
     } catch (ex) {
       showError(ex)
@@ -111,44 +140,21 @@ function Console ({ api, auth, onSignOut }: { api: TimelimitApi, auth: Auth, onS
     }
   }
 
-  const runUndo = async (undo: NonNullable<Work['undo']>) => {
-    try {
-      const fresh = await connection.refresh()
-      await run({ key: 'undo', actions: undo(fresh), done: 'Отменено' })
-    } catch (ex) {
-      showError(ex)
-    }
-  }
-
-  if (!state) {
-    return (
-      <main class='page'>
-        <p class='muted'>{syncProblem ? `Не удалось загрузить семью: ${syncProblem}` : 'Загружаем семью…'}</p>
-        {syncProblem ? <button type='button' onClick={() => void refresh()}>Повторить</button> : null}
-        <button type='button' class='link' onClick={onSignOut}>Выйти</button>
-        <Toast toast={toast} close={() => setToast(null)} />
-      </main>
-    )
-  }
-
-  const kids = children(state)
-  const child = kids.find((c) => c.id === childId) ?? kids[0]
   if (!child) {
     return (
       <main class='page signin'>
-        <AddChildForm run={run} onAdded={(id) => { writeLocal('child', id); setChildId(id) }} />
-        <button type='button' class='link' onClick={onSignOut}>Выйти</button>
+        <AddChildForm run={run} />
+        <button type='button' class='link' onClick={() => void leave()}>Выйти</button>
         <Toast toast={toast} close={() => setToast(null)} />
       </main>
     )
   }
 
-  const [requested, argument] = route.split('/')
-  const screen = ['bans', 'limits', 'history', 'sites', 'category', 'device'].includes(requested) ? requested : ''
-  const context: AppContext = { state, child, now, pending, run, showError }
-  const parent = findParentOfDevice(state, auth.ownDeviceId)
-  const signOut = () => {
-    if (confirm('Выйти из веб-админки? Для входа снова понадобится Google-аккаунт или код из письма.')) onSignOut()
+  const context: AppContext = { family, child, now, view: screenView.data, pending, run, showError }
+  const parent = family.parents.find((person) => person.id === family.signedInUserId)
+  const stale = screenView.staleSince ?? familyStale
+  const askToLeave = () => {
+    if (confirm('Выйти из веб-админки? Для входа снова понадобится Google-аккаунт или код из письма.')) void leave()
   }
 
   return (
@@ -165,22 +171,31 @@ function Console ({ api, auth, onSignOut }: { api: TimelimitApi, auth: Auth, onS
               </div>
               )
             : <h1>{child.name}</h1>}
-          <Account parent={parent} serverUrl={api.serverUrl} />
+          <Account parent={parent} serverUrl={family.serverUrl} />
         </div>
-        <button type='button' class='link' onClick={signOut}>Выйти</button>
+        <button type='button' class='link' onClick={askToLeave}>Выйти</button>
       </header>
-      {syncProblem
-        ? <div class='banner'>Не обновилось: {syncProblem}. <button type='button' class='link' onClick={() => void refresh()}>Повторить</button></div>
+      {stale !== null
+        ? <div class='banner'>Данные от {clockOf(stale)}: сервер синхронизации не отвечает, показано последнее известное.</div>
         : null}
-      {state.message ? <div class='banner'>Сообщение сервера: {state.message}</div> : null}
+      {screenView.problem
+        ? <div class='banner'>Не обновилось: {screenView.problem}. <button type='button' class='link' onClick={reload}>Повторить</button></div>
+        : null}
+      {family.message ? <div class='banner'>Сообщение сервера: {family.message}</div> : null}
       <main class='page'>
-        {screen === '' ? <Home /> : null}
-        {screen === 'bans' ? <Bans /> : null}
-        {screen === 'limits' ? <Limits /> : null}
-        {screen === 'history' ? <History /> : null}
-        {screen === 'sites' ? <Sites /> : null}
-        {screen === 'category' ? <CategoryDetails categoryId={argument ?? ''} /> : null}
-        {screen === 'device' ? <AddDevice createToken={() => connection.createAddDeviceToken()} refresh={refresh} serverUrl={api.serverUrl} /> : null}
+        {viewName !== null && screenView.data === null
+          ? <p class='muted'>{screenView.problem ? <a href='#/'>← На главную</a> : 'Загружаем…'}</p>
+          : (
+            <>
+              {screen === '' ? <Home /> : null}
+              {screen === 'bans' ? <Bans /> : null}
+              {screen === 'limits' ? <Limits /> : null}
+              {screen === 'history' ? <History /> : null}
+              {screen === 'sites' ? <Sites /> : null}
+              {screen === 'category' ? <CategoryDetails /> : null}
+              {screen === 'device' ? <AddDevice serverUrl={family.serverUrl} /> : null}
+            </>
+            )}
       </main>
       <Toast toast={toast} close={() => setToast(null)} />
       <nav class='tabs'>
@@ -192,8 +207,9 @@ function Console ({ api, auth, onSignOut }: { api: TimelimitApi, auth: Auth, onS
   )
 }
 
+forgetLegacySecrets()
 void loadWebConfig().then((config) => {
   const container = document.getElementById('app')!
   container.textContent = ''
-  render(<Root config={config} api={createApi(config)} />, container)
+  render(<Root config={config} />, container)
 })
