@@ -29,7 +29,7 @@ export function PasswordField ({ value, onInput }: { value: string, onInput: (va
         <span class={ok ? '' : 'muted'}>{ok ? '✓ ' : ''}не короче {PARENT_PASSWORD_MIN_LENGTH} символов; длиннее — надёжнее, ребёнок может подсмотреть</span>
         <button type='button' class='link small' aria-pressed={shown} onClick={() => setShown(!shown)}>{shown ? 'скрыть' : 'показать'}</button>
       </div>
-      <p class='muted small'>Пароль открывает режим родителя на самом детском устройстве — чтобы поменять настройки, взяв его в руки. Для входа в пульт он не нужен.</p>
+      <p class='muted small'>Пароль открывает режим родителя на самом детском устройстве — чтобы поменять настройки, взяв его в руки. Для входа в веб-админку он не нужен.</p>
     </>
   )
 }

@@ -148,7 +148,7 @@ function Console ({ api, auth, onSignOut }: { api: TimelimitApi, auth: Auth, onS
   const context: AppContext = { state, child, now, pending, run, showError }
   const parent = findParentOfDevice(state, auth.ownDeviceId)
   const signOut = () => {
-    if (confirm('Выйти из пульта? Для входа снова понадобится Google-аккаунт или код из письма.')) onSignOut()
+    if (confirm('Выйти из веб-админки? Для входа снова понадобится Google-аккаунт или код из письма.')) onSignOut()
   }
 
   return (

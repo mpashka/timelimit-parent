@@ -1,6 +1,6 @@
 {
-  "name": "Пульт TimeLimit",
-  "short_name": "Пульт",
+  "name": "Веб-админка TimeLimit",
+  "short_name": "Веб-админка",
   "lang": "ru",
   "start_url": "./",
   "scope": "./",

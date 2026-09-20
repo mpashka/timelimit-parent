@@ -94,7 +94,7 @@ export function errorText (ex: unknown): ErrorText {
     if (MAIL_AUTH_ENDPOINTS.some((endpoint) => ex.endpoint.startsWith(endpoint))) {
       return { title: 'Подтверждение почты больше не годится', hint: 'Оно одноразовое и живёт три часа — начните вход заново.', signInAgain: true }
     }
-    return { title: 'Сервер не знает это устройство', hint: 'Пульт удалили из семьи или вход устарел — войдите заново.', signInAgain: true }
+    return { title: 'Сервер не знает это устройство', hint: 'Веб-админку удалили из семьи или вход устарел — войдите заново.', signInAgain: true }
   }
   if (ex instanceof ParentConsoleError && /cannot reach/.test(ex.message)) {
     return { title: 'Нет связи с сервером', hint: `Проверьте интернет и повторите; данные обновятся сами, когда связь вернётся. (${ex.message})`, signInAgain: false }

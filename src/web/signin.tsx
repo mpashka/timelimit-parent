@@ -32,7 +32,7 @@ type Step =
 const defaultDeviceName = (): string => {
   const agent = navigator.userAgent
   const model = /iPhone/.test(agent) ? 'iPhone' : /iPad/.test(agent) ? 'iPad' : /Android/.test(agent) ? 'Android' : 'браузер'
-  return `Пульт — ${model}`
+  return `Веб-админка — ${model}`
 }
 
 export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi, googleClientId?: string, onSignedIn: (auth: Auth) => void }) {
@@ -97,7 +97,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
 
   return (
     <main class='page signin'>
-      <h1>Пульт TimeLimit</h1>
+      <h1>Веб-админка TimeLimit</h1>
       <p class='muted small account'>Сервер {serverLabel(api.serverUrl)}</p>
       {step.name === 'mail'
         ? (
@@ -123,7 +123,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
             <label>Код из письма на {step.mail} — три слова
               <input autocapitalize='off' autocomplete='one-time-code' autocorrect='off' spellcheck={false} required value={code} onInput={(e) => setCode(e.currentTarget.value)} />
             </label>
-            <SubmitButton phase={phase}>Открыть пульт</SubmitButton>
+            <SubmitButton phase={phase}>Открыть веб-админку</SubmitButton>
             <button type='button' class='link' onClick={restart}>Другая почта</button>
           </form>
           )
@@ -158,7 +158,7 @@ export function SignIn ({ api, googleClientId, onSignedIn }: { api: TimelimitApi
           )
         : null}
       <ErrorBox error={error} />
-      <p class='muted small'>Нет семьи — пульт создаст её. Есть — войдёт в неё ещё одним устройством родителя, без пароля; в списке устройств семьи он появится как «{defaultDeviceName()}». Выход — кнопка «Выйти» наверху.</p>
+      <p class='muted small'>Нет семьи — веб-админка создаст её. Есть — войдёт в неё ещё одним устройством родителя, без пароля; в списке устройств семьи он появится как «{defaultDeviceName()}». Выход — кнопка «Выйти» наверху.</p>
       <p class='muted small'>timelimit-parent, AGPL-3.0.</p>
     </main>
   )

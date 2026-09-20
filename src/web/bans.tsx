@@ -35,7 +35,7 @@ export function Bans () {
         ? (
           <section class='card'>
             <h2>Из старой настройки приложения</h2>
-            <p class='muted small'>Заблокированное время, заданное в приложении старым способом; пульт его показывает, но правится оно в приложении.</p>
+            <p class='muted small'>Заблокированное время, заданное в приложении старым способом; веб-админка его показывает, но правится оно в приложении.</p>
             {overview.legacyBans.map((ban) => <div key={banKey(ban)}>{banLabel(ban)} — {ban.categoryIds.map(title).join(', ')}</div>)}
           </section>
           )
