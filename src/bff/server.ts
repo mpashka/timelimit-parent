@@ -62,7 +62,17 @@ export class Bff {
   }
 
   listen (port: number, host = '127.0.0.1'): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      // A taken port stops the start: sharing one silently sends a phone on `adb reverse` to the
+      // wrong server, and the fault then looks like a defect of the app — see the dev-ports rule.
+      this.server.once('error', (error: NodeJS.ErrnoException) => {
+        reject(error.code === 'EADDRINUSE'
+          ? new ParentConsoleError(
+            `${host}:${port} is already taken`,
+            'another BFF or dev server holds the port: find it with `ss -ltnp` and stop it, or set TIMELIMIT_BFF_PORT'
+          )
+          : error)
+      })
       this.server.listen(port, host, () => {
         this.timer = setInterval(() => { void this.pollAll() }, this.fastPollMs)
         this.timer.unref()

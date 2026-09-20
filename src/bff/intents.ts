@@ -63,8 +63,8 @@ function strings (body: Body, field: string): string[] {
 }
 
 export class BadRequestError extends ParentConsoleError {
-  constructor (message: string) {
-    super(message, 'the browser and the BFF disagree about the request format — reload the page')
+  constructor (message: string, hint = 'the browser and the BFF disagree about the request — reload the page') {
+    super(message, hint)
     this.name = 'BadRequestError'
   }
 }
@@ -178,12 +178,24 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
   'child-add': (context, body) => addChild({ name: str(body, 'name'), timeZone: str(body, 'timeZone') }).actions
 }
 
+/**
+ * Building an intent is pure: it reads the body and the state and returns actions. So anything it
+ * throws means the browser asked for something this state cannot serve — a missing category, a
+ * ban index from a screen that has moved on — and the cure is always the same, reload the screen.
+ * Classifying that as an internal failure would send the person to the logs for their own stale tab.
+ */
 export function buildIntent (name: string, context: IntentContext, body: Body): ParentAction[] {
   const build = intents[name]
   if (!build) {
-    throw new ParentConsoleError(`no such intent: ${name}`, `known intents: ${Object.keys(intents).join(', ')}`)
+    throw new BadRequestError(`no such intent: ${name}`, `known intents: ${Object.keys(intents).join(', ')}`)
   }
-  return build(context, body)
+  try {
+    return build(context, body)
+  } catch (error) {
+    if (error instanceof BadRequestError) throw error
+    if (error instanceof ParentConsoleError) throw new BadRequestError(error.message, error.hint)
+    throw error
+  }
 }
 
 export const intentNames = (): string[] => Object.keys(intents)

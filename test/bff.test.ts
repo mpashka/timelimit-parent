@@ -102,8 +102,21 @@ test('an unknown intent is told what the known ones are', async () => {
   await call('/signin/session', { mailAuthToken: 'mail-token' })
 
   const result = await call('/intent/make-tea', { child: 'child1' })
-  assert.equal(result.status, 500)
+  assert.equal(result.status, 400)
+  assert.equal(result.body.error.kind, 'bad-request')
   assert.match(result.body.error.hint, /known intents:/)
+})
+
+test('a screen that has moved on is told to reload, not sent to the logs', async () => {
+  const server = fakeServer()
+  const { bff, call } = await startBff(server)
+  after(() => bff.close())
+  await call('/signin/session', { mailAuthToken: 'mail-token' })
+
+  const result = await call('/intent/grant', { child: 'child1', category: 'no such category', minutes: 1 })
+  assert.equal(result.status, 400)
+  assert.equal(result.body.error.kind, 'bad-request')
+  assert.match(result.body.error.hint, /categories:/)
 })
 
 test('a silent sync server gives the last known view, marked stale', async () => {
