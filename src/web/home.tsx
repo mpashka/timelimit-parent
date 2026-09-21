@@ -1,4 +1,3 @@
-import { useState } from 'preact/hooks'
 import type { Ban, CategoryNow, NowView } from './api.ts'
 import { banEndsAt, formatDuration, formatUntil } from './format.ts'
 import { countAdvancedOpened } from './store.ts'
@@ -123,7 +122,6 @@ function ChildActions () {
 function CategoryRow ({ category }: { category: CategoryNow }) {
   const { now } = useApp()
   const view = useScreen<NowView>()
-  const [allowing, setAllowing] = useState(false)
   const tz = view.child.timeZone
   const title = (id: string) => view.categories.find((c) => c.id === id)?.title ?? id
   const remaining = category.remaining?.includingExtraTime ?? null
@@ -133,21 +131,25 @@ function CategoryRow ({ category }: { category: CategoryNow }) {
   // ponytail: the view says until when limits are off, not whether that came from the category or
   // from the whole child, so "вернуть" appears only when the category outlives the child's permit
   const ownLimitsOff = category.limitsDisabledUntil !== null && category.limitsDisabledUntil > view.child.disableLimitsUntil
+  // extra time does not get through a hard ban, so during one "+N" lifts the limits for N minutes instead
+  const duringBan = banned || activeBan !== undefined
 
-  const grant = (minutes: number) => () => ({
-    key: `grant-${category.id}-${minutes}`,
-    intent: 'grant',
-    body: { category: category.id, minutes },
-    done: `+${formatDuration(minutes * MINUTE)} к «${category.title}»`,
-    undo: () => ({ intent: 'grant', body: { category: category.id, minutes: -minutes } })
-  })
   const allowFor = (until: number, label: string) => () => ({
-    key: `allow-${category.id}-${label}`,
+    key: `grant-${category.id}-${label}`,
     intent: 'allow',
     body: { category: category.id, until },
     done: `«${category.title}» разрешено ${formatUntil(until, now, tz)}`,
-    undo: () => ({ intent: 'allow', body: { category: category.id, until: 0 } })
+    undo: () => ({ intent: 'allow', body: { category: category.id, until: ownLimitsOff ? category.limitsDisabledUntil : 0 } })
   })
+  const grant = (minutes: number) => duringBan
+    ? allowFor(Math.max(now, category.limitsDisabledUntil ?? 0) + minutes * MINUTE, String(minutes))
+    : () => ({
+        key: `grant-${category.id}-${minutes}`,
+        intent: 'grant',
+        body: { category: category.id, minutes },
+        done: `+${formatDuration(minutes * MINUTE)} к «${category.title}»`,
+        undo: () => ({ intent: 'grant', body: { category: category.id, minutes: -minutes } })
+      })
 
   return (
     <article class='card category' style={{ marginInlineStart: `${category.depth * 12}px` }}>
@@ -179,7 +181,7 @@ function CategoryRow ({ category }: { category: CategoryNow }) {
             )
           : null}
         {banned
-          ? <span class='chip warn'>запрет {activeBan ? formatUntil(banEndsAt(activeBan, now, tz), now, tz) : ''}<button type='button' class='link' aria-expanded={allowing} onClick={() => setAllowing(!allowing)}>разрешить…</button></span>
+          ? <span class='chip warn'>запрет {activeBan ? formatUntil(banEndsAt(activeBan, now, tz), now, tz) : ''}</span>
           : null}
         {category.limitsDisabledUntil
           ? (
@@ -196,20 +198,11 @@ function CategoryRow ({ category }: { category: CategoryNow }) {
           ? <span class='chip'>время сейчас не считается</span>
           : null}
       </div>
-      {allowing && banned
-        ? (
-          <div class='chips' role='group' aria-label='На сколько разрешить'>
-            <ActionButton work={allowFor(now + 20 * MINUTE, '20')}>20 мин</ActionButton>
-            <ActionButton work={allowFor(now + 60 * MINUTE, '60')}>1 ч</ActionButton>
-            {activeBan ? <ActionButton work={allowFor(banEndsAt(activeBan, now, tz), 'end')}>до конца запрета</ActionButton> : null}
-            <button type='button' class='link' onClick={() => setAllowing(false)}>отмена</button>
-          </div>
-          )
-        : null}
-      {limit !== null
+      {limit !== null || duringBan
         ? (
           <div class='chips grants'>
             {GRANTS.map((minutes) => <ActionButton key={minutes} work={grant(minutes)}>+{minutes}</ActionButton>)}
+            {activeBan ? <ActionButton class='link' work={allowFor(banEndsAt(activeBan, now, tz), 'end')}>до конца запрета</ActionButton> : null}
           </div>
           )
         : null}
