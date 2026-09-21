@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { addBanActions, readBans, readLegacyBans, removeBanActions } from '../src/core/bans.ts'
 import { MINUTE_MAX, type ServerRule } from '../src/core/protocol.ts'
 import { childCategories, type CategoryView } from '../src/core/state.ts'
-import { parseDays } from '../src/core/time.ts'
+import { parseDays } from '../src/shared/time.ts'
 import { fixtureState } from './helpers.ts'
 
 const emptyCategory = (id: string, blockedTimes = ''): CategoryView => ({

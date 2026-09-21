@@ -17,7 +17,7 @@ import {
 import { hashParentPassword } from '../../src/core/password.ts'
 import { MemoryStorage, SyncClient } from '../../src/core/session.ts'
 import { childCategories, type FamilyState } from '../../src/core/state.ts'
-import { localTime } from '../../src/core/time.ts'
+import { localTime } from '../../src/shared/time.ts'
 
 // @tag:parent-console
 // End-to-end against a real timelimit-server started from TIMELIMIT_E2E_SERVER_DIR (built, `npm run build:json && tsc`).

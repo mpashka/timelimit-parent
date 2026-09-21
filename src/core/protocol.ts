@@ -34,5 +34,5 @@ export const URL_FILTER_API_LEVEL = 10
 
 /** The sync server announces parent sessions by raising apiLevel to this. */
 export const PARENT_SESSION_API_LEVEL = 11
-export const ALL_DAYS = 127
+export { ALL_DAYS } from '../shared/time.ts'
 export const USER_FLAGS_ALL = 1 | 2

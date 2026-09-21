@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "compilerOptions": {
-    "types": [],
-    "lib": ["ES2023", "DOM"],
-    "noEmit": true
-  },
-  "include": ["src/core"]
-}

@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import type { Ban, BansView } from './api.ts'
 import { ALL_DAYS, type BanSpec, banKey, banLabel, clockAfter, DAY_NAMES, MINUTE_MAX } from './format.ts'
-import { formatClock, parseClock } from './time.ts'
+import { formatClock, parseClock } from '../shared/time.ts'
 import { ActionButton, SubmitButton, useApp, useBusy, useScreen, type Work } from './ui.tsx'
 
 // @tag:parent-console

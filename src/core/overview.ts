@@ -2,7 +2,7 @@ import { type Ban, isBanActiveAt, readBans, readLegacyBans } from './bans.ts'
 import { ParentConsoleError } from './errors.ts'
 import type { ServerDevice, ServerRule, UsedTimeItem } from './protocol.ts'
 import { type CategoryView, childCategories, children, type FamilyState, type User } from './state.ts'
-import { localTime } from './time.ts'
+import { localTime } from '../shared/time.ts'
 
 // @tag:parent-console
 

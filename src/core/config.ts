@@ -5,7 +5,7 @@ import { categoryDepthOrder } from './overview.ts'
 import { setUrlFilter, validateUrlFilter } from './operations.ts'
 import { MINUTE_MAX, type ParentAction, type ServerRule, type SerializedRule, type UrlFilter, USER_FLAGS_ALL } from './protocol.ts'
 import { type CategoryView, childCategories, type FamilyState } from './state.ts'
-import { formatClock, formatDays, parseClock, parseDays } from './time.ts'
+import { formatClock, formatDays, parseClock, parseDays } from '../shared/time.ts'
 
 // @tag:parent-console
 

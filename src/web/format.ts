@@ -1,8 +1,8 @@
-import { formatClock, localTime, timestampAt } from './time.ts'
+import { ALL_DAYS, formatClock, localTime, timestampAt } from '../shared/time.ts'
 
 // @tag:parent-console
 
-export const ALL_DAYS = 127
+export { ALL_DAYS }
 export const MINUTE_MAX = 24 * 60 - 1
 
 export const DAY_NAMES = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']

@@ -2,7 +2,7 @@ import { ParentConsoleError } from './errors.ts'
 import { generateId } from './ids.ts'
 import { ALL_DAYS, MINUTE_MAX, type ParentAction, type ServerRule, URL_FILTER_API_LEVEL, type UrlFilter } from './protocol.ts'
 import { type CategoryView, childCategories, type FamilyState, type User } from './state.ts'
-import { localTime } from './time.ts'
+import { localTime } from '../shared/time.ts'
 
 // @tag:parent-console
 

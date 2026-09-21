@@ -7,6 +7,6 @@
     "jsxImportSource": "preact",
     "noEmit": true
   },
-  "include": ["src/core", "src/web"],
+  "include": ["src/shared", "src/web"],
   "exclude": []
 }

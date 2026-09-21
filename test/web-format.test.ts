@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { parseDays } from '../src/core/time.ts'
+import { parseDays } from '../src/shared/time.ts'
 import { banEndsAt, banLabel, BffError, errorText, type FailureKind, formatCountdown, formatDuration, formatUntil } from '../src/web/format.ts'
 import { moscow } from './helpers.ts'
 

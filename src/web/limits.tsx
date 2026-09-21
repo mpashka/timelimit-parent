@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks'
 import type { CategoryView, LimitsView } from './api.ts'
 import { clockAfter, dailyLimitOf, formatDaysRu, formatDuration } from './format.ts'
 import { countAdvancedOpened } from './store.ts'
-import { formatClock } from './time.ts'
+import { formatClock } from '../shared/time.ts'
 import { ActionButton, SubmitButton, useApp, useBusy, useScreen } from './ui.tsx'
 
 // @tag:parent-console

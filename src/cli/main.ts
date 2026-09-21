@@ -15,7 +15,7 @@ import { childOverview, findCategory, findChild, findDevice, usageHistory } from
 import { ALL_DAYS, type ParentAction } from '../core/protocol.ts'
 import { SyncClient } from '../core/session.ts'
 import { childCategories, type FamilyState } from '../core/state.ts'
-import { formatClock, formatDays, parseClock, parseDays, parseDurationMinutes, parseUntil } from '../core/time.ts'
+import { formatClock, formatDays, parseClock, parseDays, parseDurationMinutes, parseUntil } from '../shared/time.ts'
 import {
   configPath, FileStorage, ownDeviceId, readConfig, readDeviceToken, serverUrl, TOKEN_KEY, writeConfig
 } from './environment.ts'

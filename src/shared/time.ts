@@ -1,7 +1,8 @@
 import { ParentConsoleError } from './errors.ts'
-import { ALL_DAYS } from './protocol.ts'
 
 // @tag:parent-console
+
+export const ALL_DAYS = 127
 
 export interface LocalTime {
   dayOfEpoch: number

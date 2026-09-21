@@ -1,7 +1,7 @@
 import { generateId } from './ids.ts'
 import { MINUTE_MAX, type ParentAction, type ServerRule } from './protocol.ts'
 import type { CategoryView } from './state.ts'
-import { formatClock, formatDays, rotateDays } from './time.ts'
+import { formatClock, formatDays, rotateDays } from '../shared/time.ts'
 
 // @tag:parent-console
 
