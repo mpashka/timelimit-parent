@@ -1,3 +1,4 @@
+import type { ScheduleKind } from '../shared/schedules.ts'
 import { type BanSpec, BffError, type Failure, type Loophole } from './format.ts'
 
 // @tag:parent-console
@@ -55,6 +56,8 @@ export interface CategoryNow {
 export interface Ban extends BanSpec {
   categoryIds: string[]
   activeNow: boolean
+  /** Only in the bans view: which of the two switches the ban belongs to, if any. */
+  kind?: ScheduleKind | null
 }
 
 export interface NamedCategory { id: string, title: string }
@@ -71,6 +74,7 @@ export interface BansView {
   bans: Ban[]
   legacyBans: Ban[]
   categories: Array<NamedCategory & { parentId: string | null }>
+  scheduleDefaults: Record<ScheduleKind, string[]>
 }
 
 export interface LimitsView {

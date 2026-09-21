@@ -2,7 +2,9 @@ import { ParentConsoleError } from '../core/errors.ts'
 import { dailyLimitRules } from '../core/operations.ts'
 import { childOverview, findChild, usageHistory } from '../core/overview.ts'
 import { PARENT_SESSION_API_LEVEL, URL_FILTER_API_LEVEL } from '../core/protocol.ts'
+import { defaultScheduleCategories } from '../core/schedules.ts'
 import { childCategories, children, type FamilyState, parents } from '../core/state.ts'
+import { scheduleKind } from '../shared/schedules.ts'
 
 // @tag:parent-console
 
@@ -49,11 +51,13 @@ const viewNow = (context: ViewContext) => {
 const viewBans = (context: ViewContext) => {
   const childId = requireChild(context)
   const overview = childOverview(context.state, childId, context.now)
+  const categories = childCategories(context.state, childId)
   return {
     child: overview.child,
-    bans: overview.bans,
+    bans: overview.bans.map((ban) => ({ ...ban, kind: scheduleKind(ban) })),
     legacyBans: overview.legacyBans,
-    categories: childCategories(context.state, childId).map(({ id, base }) => ({ id, title: base?.title ?? id, parentId: base?.parentCategoryId || null }))
+    categories: categories.map(({ id, base }) => ({ id, title: base?.title ?? id, parentId: base?.parentCategoryId || null })),
+    scheduleDefaults: { sleep: defaultScheduleCategories('sleep', categories), study: defaultScheduleCategories('study', categories) }
   }
 }
 

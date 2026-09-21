@@ -6,7 +6,9 @@ import {
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild } from '../core/overview.ts'
 import { ALL_DAYS, type ParentAction, type UrlFilter } from '../core/protocol.ts'
+import { type ScheduleBan, setScheduleActions } from '../core/schedules.ts'
 import { childCategories, type FamilyState } from '../core/state.ts'
+import { SCHEDULE_KINDS, type ScheduleKind } from '../shared/schedules.ts'
 
 // @tag:parent-console
 
@@ -142,6 +144,20 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
       ban: banSpec(body),
       categoryIds: chosen
     })
+  },
+
+  'schedule-set': (context, body) => {
+    const childId = child(context, body).id
+    const kind = str(body, 'kind') as ScheduleKind
+    if (!SCHEDULE_KINDS.includes(kind)) throw badRequest(`kind must be one of ${SCHEDULE_KINDS.join(', ')}`)
+    const list = body.bans
+    if (!Array.isArray(list)) throw badRequest('bans must be an array')
+    const categories = childCategories(context.state, childId)
+    const wanted = list.map((item): ScheduleBan => {
+      if (typeof item !== 'object' || item === null) throw badRequest('every ban must be an object')
+      return { ...banSpec(item as Body), categoryIds: strings(item as Body, 'categories').map((query) => findCategory(categories, query).id) }
+    })
+    return setScheduleActions({ categories, bans: childOverview(context.state, childId, context.now).bans, kind, wanted })
   },
 
   'limit-set': (context, body) => {
