@@ -45,6 +45,22 @@ npm run web -- --server https://your-server   # same, API proxied to a real serv
 The server is taken from `--server`, `TIMELIMIT_SERVER` or `serverUrl` in the config; the built-in
 default points to the author's own server, so set yours.
 
+### Protocol types are generated, not written
+
+`src/core/protocol.generated.ts` comes from the schemas the sync server publishes and validates
+requests against (`timelimit-server/docs/schema/*.schema.json`); `src/core/protocol.ts` only gives
+those types the names this client uses and adds its own constants. The generated file is committed,
+so a build without a server clone works; `npm test` and `npm run build` regenerate it in memory and
+fail when the committed file no longer matches, so a protocol change is caught here instead of by a
+family whose request gets rejected.
+
+```bash
+npm run protocol:types                                          # from ../timelimit-server
+TIMELIMIT_SERVER_DIR=/path/to/clone npm run protocol:types      # from somewhere else
+```
+
+Without a server clone the check says where it looked and builds on the committed file as it is.
+
 The web console must be served from the same origin as the sync server (the server sends CORS
 headers only for `/admin`), e.g. `dist/web/` under `/console/` — not `/parent/`, which is a server
 API path. Asset paths are relative. `GOOGLE_CLIENT_ID=... npm run build` enables Google sign-in.
@@ -69,7 +85,7 @@ The parent device token grants full parent rights over the family. Treat it as a
 
 ## License
 
-AGPL-3.0, see [LICENSE](LICENSE). Protocol types are derived from
+AGPL-3.0, see [LICENSE](LICENSE). Protocol types are generated from the schemas of
 [timelimit-server](https://codeberg.org/timelimit/timelimit-server) by Jonas Lochmann (AGPL-3.0).
 
 ## По-русски

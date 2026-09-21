@@ -1,18 +1,10 @@
 import { ApiError, ParentConsoleError } from './errors.ts'
 import type { ParentPassword } from './password.ts'
-import type { ClientDataStatus, ServerDataStatus } from './protocol.ts'
+import type { ClientDataStatus, PushActionItem, ServerDataStatus } from './protocol.ts'
 
 // @tag:parent-console
 
 export const DEFAULT_SERVER_URL = 'https://child-time.pasha-home.ru'
-
-export interface PushActionItem {
-  encodedAction: string
-  sequenceNumber: number
-  integrity: 'device'
-  type: 'parent'
-  userId: string
-}
 
 export interface SignInResult {
   deviceAuthToken: string

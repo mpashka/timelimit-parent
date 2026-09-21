@@ -1,6 +1,6 @@
-import type { AddDeviceToken, PushActionItem, TimelimitApi } from './api.ts'
+import type { AddDeviceToken, TimelimitApi } from './api.ts'
 import { ParentConsoleError } from './errors.ts'
-import type { ParentAction } from './protocol.ts'
+import type { ParentAction, PushActionItem } from './protocol.ts'
 import { createEmptyState, type FamilyState, findParentOfDevice, mergeServerStatus, toClientStatus } from './state.ts'
 
 // @tag:parent-console

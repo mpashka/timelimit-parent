@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { addBanActions, readBans, readLegacyBans, removeBanActions } from '../src/core/bans.ts'
-import type { ServerRule } from '../src/core/protocol.ts'
+import { MINUTE_MAX, type ServerRule } from '../src/core/protocol.ts'
 import { childCategories, type CategoryView } from '../src/core/state.ts'
 import { parseDays } from '../src/core/time.ts'
 import { fixtureState } from './helpers.ts'
@@ -14,7 +14,8 @@ const emptyCategory = (id: string, blockedTimes = ''): CategoryView => ({
   versions: { base: '', apps: '', rules: '', usedTime: '', tasks: '' },
   base: {
     categoryId: id, childId: 'child1', title: id, blockedTimes, extraTime: 0, extraTimeDay: -1, tempBlocked: false, tempBlockTime: 0,
-    version: '', parentCategoryId: '', blockAllNotifications: false, timeWarnings: 0, mblCharging: 0, mblMobile: 0, sort: 0, dlu: 0, flags: 0, blockNotificationDelay: 0
+    version: '', parentCategoryId: '', blockAllNotifications: false, timeWarnings: 0, mblCharging: 0, mblMobile: 0, sort: 0, dlu: 0, flags: 0,
+    blockNotificationDelay: 0, networks: [], atw: []
   }
 })
 
@@ -44,7 +45,11 @@ test('expanded rules on several categories group back into the same bans', () =>
     for (const action of addBanActions(categories, spec)) {
       if (action.type !== 'CREATE_TIMELIMIT_RULE') continue
       const { rule } = action
-      const serverRule: ServerRule = { id: rule.ruleId, extraTime: rule.extraTime, dayMask: rule.days, maxTime: rule.time, start: rule.start, end: rule.end, session: 0, pause: 0, perDay: rule.perDay }
+      // The fields the action may omit get the defaults of the server's own TimeLimitRule.parse.
+      const serverRule: ServerRule = {
+        id: rule.ruleId, extraTime: rule.extraTime, dayMask: rule.days, maxTime: rule.time,
+        start: rule.start ?? 0, end: rule.end ?? MINUTE_MAX, session: 0, pause: 0, perDay: rule.perDay ?? false
+      }
       categories.find((c) => c.id === rule.categoryId)!.rules.push(serverRule)
     }
   }

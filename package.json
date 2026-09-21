@@ -16,9 +16,10 @@
     "./core": "./dist/core/index.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && node scripts/web.mjs build",
+    "build": "node scripts/protocol-types.mjs check && tsc -p tsconfig.json && node scripts/web.mjs build",
     "typecheck": "tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.core.json && tsc -p tsconfig.web.json",
-    "test": "rm -rf build && tsc -p tsconfig.test.json && node --test \"build/test/**/*.test.js\"",
+    "test": "node scripts/protocol-types.mjs check && rm -rf build && tsc -p tsconfig.test.json && node --test \"build/test/**/*.test.js\"",
+    "protocol:types": "node scripts/protocol-types.mjs",
     "test:e2e": "rm -rf build && tsc -p tsconfig.test.json && node --test --test-concurrency=1 build/test/e2e/server.e2e.js",
     "cli": "npm run build --silent && node dist/cli/main.js",
     "bff": "npm run build --silent && node dist/bff/main.js",
