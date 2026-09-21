@@ -1,0 +1,15 @@
+# The build context of this Dockerfile is the directory above both clones, which on a developer's
+# machine also holds the Android app, the installer and the server UI. Without this file all of
+# that would be packed and sent to the daemon.
+*
+!timelimit-server
+!timelimit-parent
+
+timelimit-server/.git
+timelimit-server/node_modules
+timelimit-server/build
+timelimit-server/test.db
+timelimit-parent/.git
+timelimit-parent/node_modules
+timelimit-parent/build
+timelimit-parent/dist

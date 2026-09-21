@@ -45,6 +45,41 @@ npm run web -- --server https://your-server   # same, API proxied to a real serv
 The server is taken from `--server`, `TIMELIMIT_SERVER` or `serverUrl` in the config; the built-in
 default points to the author's own server, so set yours.
 
+### The BFF: on its own, or with the sync server in one process
+
+The web console talks only to the BFF (`src/bff`), and the BFF talks only to the sync server's
+HTTP API. Where that server runs is a deployment choice, and there are two:
+
+```bash
+# on its own — the sync server is somewhere else and already running
+TIMELIMIT_SERVER=https://your-server npm run bff
+
+# merged — the sync server runs inside this process, from a built clone next door
+TIMELIMIT_SERVER_ENTRY=../timelimit-server/build/index.js \
+  DATABASE_URL=sqlite://./bff-dev.db PORT=8080 npm run bff
+```
+
+`TIMELIMIT_SERVER_ENTRY` is the whole switch: unset, nothing changes and the BFF runs alone; set,
+it is the path to the sync server's built entry file (`<clone>/build/index.js`, made there by
+`npm install && npm run build`). That file ends with `main().catch(...)`, so importing it starts
+the server — that, and only that, is what the merged mode uses. No function of the server is
+called and nothing of it is imported by name; the BFF keeps talking HTTP, now through the loopback
+into itself. Everything else the server needs (`DATABASE_URL`, `PORT`, mail, `ALWAYS_PRO`) it
+still reads from the environment itself.
+
+In the merged mode `TIMELIMIT_SERVER` defaults to `http://127.0.0.1:$PORT` — the server next door,
+never the public built-in default. The BFF waits for that address to answer `/time` before it
+starts listening, for up to two minutes, and says which address and which entry file gave up if it
+does not.
+
+The `Dockerfile` here builds the merged image, so its build context is the directory holding
+**both** clones:
+
+```bash
+cd ..                                            # the directory with timelimit-server/ and timelimit-parent/
+docker build -f timelimit-parent/Dockerfile -t timelimit .
+```
+
 ### Protocol types are generated, not written
 
 `src/core/protocol.generated.ts` comes from the schemas the sync server publishes and validates
