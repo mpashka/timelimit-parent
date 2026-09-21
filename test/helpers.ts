@@ -1,9 +1,7 @@
-import { readFileSync } from 'node:fs'
-import type { ServerDataStatus } from '../src/core/protocol.ts'
 import { createEmptyState, type FamilyState, mergeServerStatus } from '../src/core/state.ts'
+import { fullStatus } from './fixtures/full-status.ts'
 
-export const fullStatus = (): ServerDataStatus =>
-  JSON.parse(readFileSync('test/fixtures/full-status.json', 'utf8')) as ServerDataStatus
+export { fullStatus }
 
 export const fixtureState = (): FamilyState => mergeServerStatus(createEmptyState(), fullStatus())
 

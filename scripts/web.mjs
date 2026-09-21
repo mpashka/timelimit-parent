@@ -54,8 +54,8 @@ function hideChildren (fixture) {
   fixture.users = { version: 'no-child', data: fixture.users.data.filter((u) => u.type !== 'child') }
 }
 
-function mockApi (path, body) {
-  const fixture = JSON.parse(readFileSync(join(root, 'test/fixtures/full-status.json'), 'utf8'))
+function mockApi (fullStatus, path, body) {
+  const fixture = fullStatus()
   const today = Math.floor((Date.now() + 3 * 3600000) / 86400000)
   const shift = today - 20710
   for (const item of fixture.usedTimes) for (const t of item.times) t.day += shift
@@ -106,7 +106,7 @@ async function startMockBff () {
   const file = join(root, 'build/dev-bff.mjs')
   await esbuild.build({
     stdin: {
-      contents: "export { Bff } from './src/bff/server.ts'\nexport { BffStore } from './src/bff/store.ts'\nexport { TimelimitApi } from './src/core/api.ts'\n",
+      contents: "export { Bff } from './src/bff/server.ts'\nexport { BffStore } from './src/bff/store.ts'\nexport { TimelimitApi } from './src/core/api.ts'\nexport { fullStatus } from './test/fixtures/full-status.ts'\n",
       resolveDir: root,
       loader: 'ts'
     },
@@ -117,9 +117,9 @@ async function startMockBff () {
     outfile: file,
     logLevel: 'warning'
   })
-  const { Bff, BffStore, TimelimitApi } = await import(pathToFileURL(file))
+  const { Bff, BffStore, TimelimitApi, fullStatus } = await import(pathToFileURL(file))
   const fetchImpl = async (url, init) => {
-    const result = mockApi(new URL(url).pathname, init?.body ? JSON.parse(init.body) : {})
+    const result = mockApi(fullStatus, new URL(url).pathname, init?.body ? JSON.parse(init.body) : {})
     const [status, payload] = Array.isArray(result) ? result : [200, result]
     return status === 200 ? Response.json(payload) : new Response(payload, { status })
   }
