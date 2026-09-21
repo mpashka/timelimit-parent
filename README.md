@@ -37,6 +37,7 @@ TIMELIMIT_E2E_SERVER_DIR=../timelimit-server npm run test:e2e   # against a buil
 npm run typecheck
 npm run build          # dist/ (CLI) and dist/web/ (web console)
 node dist/cli/main.js --help
+ln -s "$PWD/dist/cli/main.js" ~/.local/bin/timelimit-parent   # on PATH without root (npm -g may need it)
 node dist/cli/main.js login --server https://your-server
 npm run web:mock       # web console on http://127.0.0.1:5180/console/ with a fake API
 npm run web -- --server https://your-server   # same, API proxied to a real server

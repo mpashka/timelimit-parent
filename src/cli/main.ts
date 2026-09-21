@@ -29,6 +29,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   device list                             devices of the family and who uses them
   device add                              code of five words for connecting a new device
   device assign <device> <child|none>     who uses the device; "none" frees it again
+  device ignore-manipulation <device>     forget the device's past manipulation warnings
   status [child]                          time used/left, bans, loopholes
   usage [child] [--days N]                used time per category per day
   grant <category> <minutes>              extra time for today
@@ -206,7 +207,22 @@ async function main (): Promise<void> {
         const target = need(args[2], 'child name or none')
         return apply(session, [{ type: 'SET_DEVICE_USER', deviceId: device.deviceId, userId: target === 'none' ? '' : child(target).id }])
       }
-      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign')
+      if (args[0] === 'ignore-manipulation') {
+        const device = findDevice(state, need(args[1], 'device id or name'))
+        if (!device.hadManipulation) return print(`${device.name}: no manipulation warning`, device)
+        return apply(session, [{
+          type: 'IGNORE_MANIPULATION',
+          deviceId: device.deviceId,
+          admin: false,
+          adminA: false,
+          downgrade: false,
+          notification: false,
+          usageStats: false,
+          hadManipulation: true,
+          ignoreHadManipulationFlags: device.hadManipulationFlags
+        }])
+      }
+      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign | device ignore-manipulation')
     }
     case 'usage': {
       const owner = child(args[0])
