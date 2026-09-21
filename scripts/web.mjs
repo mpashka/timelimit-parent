@@ -69,11 +69,10 @@ function mockApi (path, body) {
       return { mailAuthToken: body.receivedCode === 'new' ? 'mock-new' : 'mock' }
     case '/parent/get-status-by-mail-address':
       return { status: body.mailAuthToken === 'mock-new' ? 'without family' : 'with family', mail: 'parent@example.com', canCreateFamily: true, alwaysPro: true }
-    case '/parent/create-family':
+    case '/session/create-family':
       console.log('create-family', body.parentName, body.parentPassword.hash.slice(0, 7), body.timeZone)
       mockFamilyWithoutChild = true
-      hideChildren(fixture)
-      return { deviceAuthToken: 'mock-token', ownDeviceId: 'devP01', data: fixture }
+      return { sessionToken: 's:' + 'm'.repeat(32), sessionId: 'sess01', familyId: 'fam1', userId: 'parnt1' }
     case '/parent/sign-in-into-family':
       mockFamilyWithoutChild = false
       return { deviceAuthToken: 'mock-token', ownDeviceId: 'devP01', data: fixture }

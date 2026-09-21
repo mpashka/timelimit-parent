@@ -23,8 +23,6 @@ export interface BffOptions {
 }
 
 const COOKIE_NAME = 'tlp.session'
-/** Name of the device the sync server insists on creating together with a new family. */
-const CONSOLE_DEVICE_NAME = 'Веб-админка TimeLimit'
 const DEFAULT_POLL_MS = 30_000
 const DEFAULT_FAST_POLL_MS = 5_000
 const EVENT_HEARTBEAT_MS = 30_000
@@ -136,24 +134,12 @@ export class Bff {
       if (password.length < PARENT_PASSWORD_MIN_LENGTH) {
         throw new BadRequestError(`the parent password must have at least ${PARENT_PASSWORD_MIN_LENGTH} characters`)
       }
-      // ponytail: the sync server creates a family only together with a first parent device, and
-      // `/parent/create-family` burns the mail token on the way, so there is nothing left to open a
-      // parent session with — this browser's session carries that device token instead. The ceiling
-      // is `/session/create-family` on the server, after which the BFF stops being a device here too.
-      const created = await this.api.createFamily({
+      const stored = this.store.createSession(await this.api.createFamilyWithSession({
         mailAuthToken: requireString(body, 'mailAuthToken'),
         password: await hashParentPassword(password),
         parentName: requireString(body, 'parentName'),
-        deviceName: CONSOLE_DEVICE_NAME,
         timeZone: requireString(body, 'timeZone')
-      })
-      const device = created.data.devices?.data.find((item) => item.deviceId === created.ownDeviceId)
-      const stored = this.store.createSession({
-        sessionToken: created.deviceAuthToken,
-        sessionId: created.ownDeviceId,
-        userId: device?.currentUserId ?? '',
-        familyId: ''
-      })
+      }))
       response.setHeader('Set-Cookie', cookie(COOKIE_NAME, stored.cookieId))
       return send(response, 200, { userId: stored.userId, familyId: stored.familyId })
     }

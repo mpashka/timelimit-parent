@@ -107,6 +107,22 @@ export class TimelimitApi {
     )
   }
 
+  /** Creates a family and its first parent without a device and signs that parent in; needs apiLevel >= PARENT_SESSION_API_LEVEL. */
+  async createFamilyWithSession ({ mailAuthToken, password, parentName, timeZone }: {
+    mailAuthToken: string, password: ParentPassword, parentName: string, timeZone: string
+  }): Promise<SessionSignInResult> {
+    return this.post<SessionSignInResult>(
+      '/session/create-family',
+      { mailAuthToken, parentPassword: password, parentName, timeZone },
+      {
+        404: 'this server has no parent sessions (needs the parent-console server branch)',
+        409: 'this mail address already has a family — sign in instead',
+        403: 'the server does not allow new families (DISABLE_SIGNUP)',
+        401: 'mail authentication expired or was already used — log in again'
+      }
+    )
+  }
+
   /** Signs a person in without registering a device; needs apiLevel >= PARENT_SESSION_API_LEVEL. */
   async signInSession ({ mailAuthToken }: { mailAuthToken: string }): Promise<SessionSignInResult> {
     return this.post<SessionSignInResult>(

@@ -18,7 +18,7 @@ function fakeServer ({ unreachable = false } = {}) {
     const body = JSON.parse(String(init.body))
     calls.push({ path, body })
     if (broken) throw new TypeError('fetch failed')
-    if (path === '/session/sign-in') return Response.json({ sessionToken: 's:' + 'a'.repeat(32), sessionId: 'sess01', familyId: 'fam1', userId: 'parnt1' })
+    if (path === '/session/sign-in' || path === '/session/create-family') return Response.json({ sessionToken: 's:' + 'a'.repeat(32), sessionId: 'sess01', familyId: 'fam1', userId: 'parnt1' })
     if (path === '/sync/pull-status') return Response.json(body.status.users === '' ? fullStatus() : { apiLevel: 11, fullVersion: 1 })
     if (path === '/sync/push-actions') return Response.json({ shouldDoFullSync: false })
     return Response.json({})
@@ -65,6 +65,21 @@ test('a signed-in browser gets a ready-made view and never sees the session toke
   const pulled = server.calls.filter((c) => c.path === '/sync/pull-status')
   assert.ok(pulled.length > 0)
   assert.ok(pulled.every((c) => c.body.deviceAuthToken.startsWith('s:')), 'the BFF presents the session token, not a device token')
+})
+
+test('creating a family opens a session and registers no device', async () => {
+  const server = fakeServer()
+  const { bff, call } = await startBff(server)
+  after(() => bff.close())
+
+  const created = await call('/signin/create-family', { mailAuthToken: 'mail-token', password: 'secret-password', parentName: 'Мама', timeZone: 'Europe/Moscow' })
+  assert.equal(created.status, 200)
+  assert.deepEqual(created.body, { userId: 'parnt1', familyId: 'fam1' })
+  const request = server.calls.find((c) => c.path === '/session/create-family')
+  assert.ok(request, 'the family is created by the session endpoint')
+  assert.equal('parentDevice' in request.body, false)
+  assert.equal(server.calls.some((c) => c.path === '/parent/create-family'), false)
+  assert.equal((await call('/view/family')).status, 200)
 })
 
 test('an intent turns into protocol actions and answers with the fresh view', async () => {
