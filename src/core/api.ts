@@ -147,6 +147,14 @@ export class TimelimitApi {
     )
   }
 
+  async removeDevice ({ deviceAuthToken, parentId, deviceId }: { deviceAuthToken: string, parentId: string, deviceId: string }): Promise<void> {
+    await this.post(
+      '/parent/remove-device',
+      { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', deviceId },
+      { 401: unauthorizedHint, 409: `device ${deviceId} is not in the family (already removed?) — see \`device list\`` }
+    )
+  }
+
   async pullStatus ({ deviceAuthToken, status }: { deviceAuthToken: string, status: ClientDataStatus }): Promise<ServerDataStatus> {
     return this.post<ServerDataStatus>('/sync/pull-status', { deviceAuthToken, status }, { 401: unauthorizedHint })
   }

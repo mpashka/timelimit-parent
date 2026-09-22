@@ -120,6 +120,13 @@ export class SyncClient {
     return this.api.createAddDeviceToken({ deviceAuthToken: this.subject.authToken, parentId })
   }
 
+  /** Removes the device from the family: its token stops working, the child it was assigned to keeps its settings. */
+  async removeDevice (deviceId: string): Promise<FamilyState> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.removeDevice({ deviceAuthToken: this.subject.authToken, parentId, deviceId })
+    return this.sync()
+  }
+
   private async nextSequenceNumber (): Promise<number> {
     const stored = Number(await this.storage.get('sequenceNumber') ?? '0')
     // ponytail: the server keeps the counter in a 32-bit column; seeding from unix seconds survives a lost

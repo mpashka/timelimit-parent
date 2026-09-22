@@ -30,6 +30,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   device add                              code of five words for connecting a new device
   device assign <device> <child|none>     who uses the device; "none" frees it again
   device ignore-manipulation <device>     forget the device's past manipulation warnings
+  device remove <device>                  remove the device from the family; its app loses the connection
   status [child]                          time used/left, bans, loopholes
   usage [child] [--days N]                used time per category per day
   grant <category> <minutes>              extra time for today
@@ -222,7 +223,17 @@ async function main (): Promise<void> {
           ignoreHadManipulationFlags: device.hadManipulationFlags
         }])
       }
-      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign | device ignore-manipulation')
+      if (args[0] === 'remove') {
+        const device = findDevice(state, need(args[1], 'device id or name'))
+        if (device.deviceId === ownDeviceId(config)) {
+          throw new ParentConsoleError(`${device.name} (${device.deviceId}) is this console's own device`, 'removing it would cut this console off; remove it from another parent device')
+        }
+        const label = `${device.name} (${device.deviceId}, ${device.model})`
+        if (options['dry-run']) return print(`would remove device ${label}`, { dryRun: true, remove: device })
+        await session.removeDevice(device.deviceId)
+        return print(`removed device ${label}`, { removed: device })
+      }
+      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign | device ignore-manipulation | device remove')
     }
     case 'usage': {
       const owner = child(args[0])
