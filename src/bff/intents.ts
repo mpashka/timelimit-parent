@@ -219,6 +219,15 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
   // @tag:app-allowance
   'app-allow': (context, body) => setAppAllowance({ childId: child(context, body).id, packageName: str(body, 'package'), until: num(body, 'until') }),
 
+  // @tag:app-rule
+  'app-rule': (context, body) => {
+    const days = num(body, 'days')
+    const limitMinutes = num(body, 'limitMinutes')
+    if (!Number.isInteger(days) || days < 0 || days > ALL_DAYS) throw badRequest('days must be a weekday mask')
+    if (!Number.isInteger(limitMinutes) || limitMinutes < -1 || limitMinutes > 1440) throw badRequest('limitMinutes must be -1..1440')
+    return [{ type: 'SET_APP_RULE', userId: child(context, body).id, packageName: str(body, 'package'), days, limitMinutes }]
+  },
+
   'child-add': (context, body) => addChild({ name: str(body, 'name'), timeZone: str(body, 'timeZone') }).actions
 }
 

@@ -71,6 +71,11 @@ function mockApi (fullStatus, path, body) {
     id: 'rq0002', packageName: 'com.robtopx.geometryjump', categoryId: '', deviceId: 'devC01',
     word: '', createdAt: asked + 60000, expiresAt: asked + 31 * 60000
   }]
+  // @tag:app-rule @tag:new-app @tag:device-state
+  const kid = fixture.users.data.find((u) => u.type === 'child')
+  kid.appRules = [{ packageName: 'com.roblox.client', days: 96, limitMinutes: -1, usedDay: 0, usedMs: 0 }]
+  kid.newApps = [{ packageName: 'com.robtopx.geometryjump', title: 'Geometry Dash', section: 'game', installedAt: Date.now() - 75 * 60000, deviceId: 'devC01' }]
+  fixture.deviceStates = [{ deviceId: 'devC01', seen: Date.now() - 20000, app: 'com.game', appSince: Date.now() - 600000 }]
   if (mockFamilyWithoutChild) hideChildren(fixture)
   switch (path) {
     case '/auth/send-mail-login-code-v2': return { mailLoginToken: 'mock' }
@@ -97,7 +102,18 @@ function mockApi (fullStatus, path, body) {
       const joined = mockDeviceTokenAt > 0 && Date.now() - mockDeviceTokenAt > 15000
       if (joined) fixture.devices.data.push({ ...fixture.devices.data[0], deviceId: 'devNew1', name: 'Планшет', model: 'mock tablet', currentUserId: '' })
       if (body.status.users !== fixture.users.version) return fixture
-      return { apiLevel: fixture.apiLevel, fullVersion: 1, ...(joined ? { devices: { ...fixture.devices, version: `joined-${mockDeviceTokenAt}` } } : {}) }
+      return { apiLevel: fixture.apiLevel, fullVersion: 1, deviceStates: fixture.deviceStates, ...(joined ? { devices: { ...fixture.devices, version: `joined-${mockDeviceTokenAt}` } } : {}) }
+    }
+    case '/parent/get-app-usage': {
+      const apps = { 'com.game': 52, 'com.google.android.youtube': 38, 'org.school': 25, 'com.roblox.client': 0 }
+      const items = []
+      for (let day = body.fromDay; day <= body.toDay; day++) {
+        for (const [packageName, minutes] of Object.entries(apps)) {
+          const ms = Math.round(minutes * (0.6 + ((day * 7 + packageName.length) % 9) / 10) * 60000)
+          if (ms > 0) items.push({ deviceId: 'devC01', day, packageName, ms })
+        }
+      }
+      return { items }
     }
     case '/sync/push-actions':
       for (const item of body.actions) console.log('push', item.sequenceNumber, item.encodedAction)

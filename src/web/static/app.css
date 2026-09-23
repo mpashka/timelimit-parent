@@ -160,7 +160,7 @@ ul.plain { list-style: none; padding: 0; margin: 6px 0 10px; }
 .mode b { font-weight: 600; }
 .mode.closed { border-color: var(--closed); }
 .mode.closed b { color: var(--closed); }
-button.closer { color: var(--closed); }
+button.closer { color: var(--closed); border-color: var(--closed); }
 h2.section { font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 2px 8px; }
 .request h3 { margin: 0; font-size: 1.05rem; }
 .quote { margin: 8px 0; padding: 8px 10px; background: var(--chip); border-radius: 10px; font-style: italic; }
@@ -174,3 +174,36 @@ h2.section { font-size: .85rem; text-transform: uppercase; letter-spacing: .04em
 button.deny { color: var(--deny); background: none; }
 .past li { padding: 4px 0; }
 .durations b { white-space: nowrap; }
+
+/* @tag:app-usage @tag:new-app @tag:device-state — «Сегодня», приложения, карточка, планшеты, панель просьб */
+.hero .big small { font-size: .9rem; font-weight: 400; margin-left: 6px; }
+.app-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin: 0 0 6px; color: var(--text); text-decoration: none; }
+.app-row .grow, .device-line .grow { flex: 1; min-width: 0; }
+.app-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-row .value { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.app-row.new { border-color: var(--accent); align-items: flex-start; }
+.app-icon { flex: none; width: 32px; height: 32px; border-radius: 9px; background: var(--chip); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; vertical-align: middle; }
+.bar { height: 6px; border-radius: 3px; background: var(--chip); margin-top: 6px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.tag { display: inline-block; font-size: .7rem; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 6px; background: var(--accent); color: var(--accent-text); vertical-align: middle; }
+.week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; height: 140px; margin-top: 12px; }
+.day-bar { display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.day-bar i { display: block; width: 70%; min-height: 2px; background: var(--accent); border-radius: 4px 4px 0 0; }
+.device-line { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--line); }
+.dot.on { background: var(--ok); }
+ul.plain.card { padding: 6px 12px; }
+.site-add { display: flex; gap: 6px; flex-wrap: wrap; }
+.site-add input { flex: 1 1 12rem; min-height: 44px; }
+.segmented button { flex: 1; }
+.scrim { position: fixed; inset: 0; background: rgba(10, 12, 20, .35); z-index: 4; }
+.panel { position: fixed; z-index: 5; background: var(--bg); overflow-y: auto; padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+  inset: 0; padding-top: calc(12px + env(safe-area-inset-top)); }
+@media (min-width: 900px) {
+  .page { max-width: 72rem; padding-left: calc(12rem + 24px); padding-right: 24px; padding-bottom: 24px; }
+  .columns { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .tabs { top: 64px; bottom: 0; left: 0; right: auto; width: 12rem; flex-direction: column; justify-content: flex-start; border-top: none; border-right: 1px solid var(--line); padding: 12px 8px; }
+  .tabs a { flex: none; text-align: left; padding: 10px 12px; border-radius: 10px; font-size: .95rem; }
+  .tabs a[aria-current="page"] { background: var(--chip); }
+  .panel { inset: 0 0 0 auto; width: min(28rem, 100vw); box-shadow: -8px 0 32px rgba(0, 0, 0, .2); }
+}

@@ -64,13 +64,52 @@ export interface NamedCategory { id: string, title: string }
 
 export interface AppAllowance { packageName: string, title: string, until: number }
 
+// @tag:app-usage @tag:new-app @tag:device-state @tag:app-rule
+export interface DeviceStatus { online: boolean, seen: number | null, app: string | null, todayMs: number | null }
+export interface DeviceWithStatus extends Device { status: DeviceStatus }
+export interface AppTime { packageName: string, title: string, ms: number, category: NamedCategory | null }
+export interface NewApp { packageName: string, title: string, section: string, installedAt: number, deviceId: string, device: string, guess: string | null }
+export interface AppRule { days: number, limitMinutes: number }
+
+export interface AppsView {
+  child: Person
+  newApps: NewApp[]
+  categories: Array<NamedCategory & { apps: Array<{ packageName: string, title: string, weekMs: number, rule: AppRule | null }> }>
+  other: Array<{ packageName: string, title: string, weekMs: number, rule: AppRule | null }>
+  appUsageProblem: string | null
+}
+
+export interface AppCardView {
+  packageName: string
+  title: string
+  isNew: boolean
+  category: NamedCategory | null
+  categories: NamedCategory[]
+  days: Array<{ day: number, ms: number }> | null
+  todayMs: number | null
+  averageMs: number | null
+  devices: Array<{ deviceId: string, name: string, weekMs: number | null }>
+  rule: AppRule | null
+  allowanceUntil: number | null
+  appUsageProblem: string | null
+}
+
+export interface DevicesView {
+  devices: DeviceWithStatus[]
+  unassigned: DeviceWithStatus[]
+  appUsageProblem: string | null
+}
+
 export interface NowView {
   child: Person
   categories: CategoryNow[]
   bans: Ban[]
   unassignedApps: unknown[] | null
-  devices: Device[]
+  devices: DeviceWithStatus[]
   allowances: AppAllowance[]
+  apps: AppTime[] | null
+  newApps: NewApp[]
+  appUsageProblem: string | null
   activeSchedule: ScheduleKind | null
   sleep: { start: number, end: number } | null
   dayEndsAt: number

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { parentCode } from '../src/core/parent-code.ts'
 import { answerCategoryId, answerRequest } from '../src/core/requests.ts'
-import { fixtureState } from './helpers.ts'
+import { appCard, guessCategory, usageDays } from '../src/core/apps.ts'
+import { fixtureState, moscow } from './helpers.ts'
 import { sleepWindow } from '../src/shared/schedules.ts'
 import { timestampAt } from '../src/shared/time.ts'
 
@@ -29,4 +30,22 @@ test('«вся категория» for an app without one opens the category fo
   child.categoryForNotAssignedApps = 'allow1'
   assert.equal(answerCategoryId(state, child.requests[0], 'child1'), 'allow1')
   assert.deepEqual(answer(), [{ type: 'ANSWER_CHILD_REQUEST', requestId: 'rq0001', answer: 'category', until: 1, word: '' }])
+})
+
+test('app card: the week sums both tablets per day, a store section guesses the family category', () => {
+  const state = fixtureState()
+  const now = moscow(14, 15)
+  const { toDay } = usageDays(state, 'child1', now)
+  const usage = [
+    { deviceId: 'devC01', day: toDay, packageName: 'com.game', ms: 600000 },
+    { deviceId: 'devX', day: toDay, packageName: 'com.game', ms: 300000 },
+    { deviceId: 'devC01', day: toDay - 1, packageName: 'com.game', ms: 1200000 },
+    { deviceId: 'devC01', day: toDay, packageName: 'other', ms: 999 }
+  ]
+  const card = appCard(state, 'child1', 'com.game', now, usage)
+  assert.equal(card.todayMs, 900000)
+  assert.equal(card.averageMs, Math.round(2100000 / 7))
+  assert.equal(card.category?.id, 'games1')
+  assert.equal(guessCategory(state, 'child1', 'game'), 'games1')
+  assert.equal(guessCategory(state, 'child1', 'maps'), null)
 })

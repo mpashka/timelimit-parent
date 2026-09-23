@@ -1,9 +1,11 @@
 import { render } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { type CodeView, type FamilyView, intent, listenChanged, loadWebConfig, signOut, type WebConfig } from './api.ts'
+import { type CodeView, type FamilyView, type RequestsView, intent, listenChanged, loadWebConfig, signOut, type WebConfig } from './api.ts'
 import { Bans } from './bans.tsx'
 import { clockOf, errorText } from './format.ts'
 import { History } from './history.tsx'
+import { AppCard, Apps } from './apps.tsx'
+import { Devices } from './devices.tsx'
 import { Requests } from './requests.tsx'
 import { Home } from './home.tsx'
 import { CategoryDetails, Limits } from './limits.tsx'
@@ -20,14 +22,14 @@ const SAFETY_RELOAD_MS = 5 * 60 * 1000
 const CLOCK_MS = 30000
 
 const tabs = [
-  { path: '', title: 'Сегодня' },
-  { path: 'bans', title: 'Режимы' },
-  { path: 'limits', title: 'Лимиты' },
-  { path: 'history', title: 'История' },
-  { path: 'sites', title: 'Сайты' }
+  { path: '', title: 'Сегодня', also: [] as string[] },
+  { path: 'apps', title: 'Приложения', also: ['app', 'limits', 'history', 'category'] },
+  { path: 'bans', title: 'Режимы', also: [] },
+  { path: 'sites', title: 'Сайты', also: [] },
+  { path: 'tablets', title: 'Планшеты', also: ['device'] }
 ]
 
-const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', limits: 'limits', history: 'history', sites: 'sites', requests: 'requests', device: null }
+const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', limits: 'limits', history: 'history', sites: 'sites', apps: 'apps', tablets: 'devices', device: null }
 
 const currentRoute = () => location.hash.replace(/^#\/?/, '')
 
@@ -88,13 +90,21 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   const [now, setNow] = useState(Date.now())
   const [pending, setPending] = useState<AppContext['pending']>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
+  const [bellOpen, setBellOpen] = useState(route === 'requests')
+  const [panelRevision, setPanelRevision] = useState(0)
+  useEffect(() => {
+    if (route !== 'requests') return
+    setBellOpen(true)
+    history.replaceState(null, '', '#/')
+    dispatchEvent(new HashChangeEvent('hashchange'))
+  }, [route])
   const toastId = useRef(0)
 
   const [requested, argument] = route.split('/')
-  const screen = ['bans', 'limits', 'history', 'sites', 'category', 'device', 'requests'].includes(requested) ? requested : ''
+  const screen = ['bans', 'limits', 'history', 'sites', 'category', 'device', 'apps', 'app', 'tablets'].includes(requested) ? requested : ''
   const kids = family.children
   const child = kids.find((kid) => kid.id === childId) ?? kids[0]
-  const viewName = child === undefined ? null : screen === 'category' ? `category/${argument ?? ''}` : screenViews[screen] ?? null
+  const viewName = child === undefined ? null : screen === 'category' ? `category/${argument ?? ''}` : screen === 'app' ? `app/${argument ?? ''}` : screenViews[screen] ?? null
   const screenView = useView<unknown>(viewName, child?.id, revision)
   const latest = useRef<unknown>(null)
   latest.current = screenView.data
@@ -129,6 +139,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
       const answer = await intent(work.intent, { child: child?.id, ...work.body, ...(viewName === null ? {} : { view: viewName }) })
       if (answer.data === undefined) reload()
       else screenView.set(answer.data)
+      setPanelRevision((value) => value + 1)
       const undo = work.undo
       setToast({ id: ++toastId.current, kind: 'done', text: work.done, undo: undo && (() => runUndo(undo)) })
       return true
@@ -175,11 +186,11 @@ function Console ({ family, familyStale, revision, reload, leave }: {
             : <h1>{child.name}</h1>}
         </div>
         <ParentCode />
-        <a class={`bell ${screen === 'requests' ? 'open' : ''}`} href={screen === 'requests' ? '#/' : '#/requests'}
+        <button type='button' class={`bell ${bellOpen ? 'open' : ''}`} aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}
           aria-label={waiting > 0 ? `Просьбы: ${waiting} ждёт ответа` : 'Просьбы'}>
           <svg viewBox='0 0 24 24' aria-hidden='true'><path d='M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0' /></svg>
           {waiting > 0 ? <span class='count'>{waiting}</span> : null}
-        </a>
+        </button>
         <details class='account-menu'>
           <summary aria-label='Аккаунт'>⋯</summary>
           <div class='card'>
@@ -205,19 +216,51 @@ function Console ({ family, familyStale, revision, reload, leave }: {
               {screen === 'limits' ? <Limits /> : null}
               {screen === 'history' ? <History /> : null}
               {screen === 'sites' ? <Sites /> : null}
-              {screen === 'requests' ? <Requests /> : null}
+              {screen === 'apps' ? <Apps /> : null}
+              {screen === 'app' ? <AppCard /> : null}
+              {screen === 'tablets' ? <Devices /> : null}
               {screen === 'category' ? <CategoryDetails /> : null}
               {screen === 'device' ? <AddDevice serverUrl={family.serverUrl} /> : null}
             </>
             )}
       </main>
+      {bellOpen ? <RequestsPanel childId={child.id} revision={revision + panelRevision} close={() => setBellOpen(false)} /> : null}
       <Toast toast={toast} close={() => setToast(null)} />
       <nav class='tabs'>
         {tabs.map((tab) => (
-          <a key={tab.path} href={`#/${tab.path}`} aria-current={screen === tab.path || (tab.path === 'limits' && screen === 'category') ? 'page' : undefined}>{tab.title}</a>
+          <a key={tab.path} href={`#/${tab.path}`} onClick={() => setBellOpen(false)}
+            aria-current={screen === tab.path || tab.also.includes(screen) ? 'page' : undefined}>{tab.title}</a>
         ))}
       </nav>
     </App.Provider>
+  )
+}
+
+/**
+ * The bell opens over whatever screen is open: a panel at the side in a browser, the whole page
+ * under the header on a phone — one component, the layout is the stylesheet's business.
+ */
+// @tag:child-request
+function RequestsPanel ({ childId, revision, close }: { childId: string, revision: number, close: () => void }) {
+  const requests = useView<RequestsView>('requests', childId, revision)
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [])
+  return (
+    <>
+      <div class='scrim' onClick={close} />
+      <aside class='panel' aria-label='Просьбы'>
+        <div class='row'>
+          <h2>Просьбы</h2>
+          <button type='button' class='link' onClick={close}>Закрыть</button>
+        </div>
+        {requests.data
+          ? <Requests view={requests.data} />
+          : <p class='muted'>{requests.problem ? `Не загрузилось: ${requests.problem}` : 'Загружаем…'}</p>}
+      </aside>
+    </>
   )
 }
 

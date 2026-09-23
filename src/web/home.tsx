@@ -1,5 +1,7 @@
 import type { Ban, CategoryNow, NowView } from './api.ts'
 import { banEndsAt, clockOf, formatDuration, formatUntil } from './format.ts'
+import { AppRow, NewAppRow } from './apps.tsx'
+import { DeviceLine } from './devices.tsx'
 import { countAdvancedOpened } from './store.ts'
 import { ActionButton, useApp, useScreen } from './ui.tsx'
 
@@ -10,21 +12,35 @@ const MINUTE = 60000
 
 export function Home () {
   const view = useScreen<NowView>()
-  const total = view.categories.filter((c) => c.depth === 0).reduce((sum, c) => sum + c.usedTodayMs, 0)
+  const categoryTotal = view.categories.filter((c) => c.depth === 0).reduce((sum, c) => sum + c.usedTodayMs, 0)
+  const total = view.apps === null ? categoryTotal : view.apps.reduce((sum, app) => sum + app.ms, 0)
+  const categories = view.categories.filter((c) => c.depth === 0).map(({ id, title }) => ({ id, title }))
+  const max = Math.max(0, ...(view.apps ?? []).map((app) => app.ms))
   return (
-    <>
-      <section class='hero'>
-        <div class='muted small'>Сегодня</div>
-        <div class='big'>{formatDuration(total)}</div>
-      </section>
-      {view.devices.length === 0 ? <ChildDevices /> : null}
-      <ModeBox />
-      <Allowances />
-      <section class='list'>
-        {view.categories.map((category) => <CategoryRow key={category.id} category={category} />)}
-      </section>
-      {view.devices.length > 0 ? <ChildDevices /> : null}
-    </>
+    <div class='columns'>
+      <div>
+        <section class='hero'>
+          <div class='muted small'>Сегодня</div>
+          <div class='big'>{formatDuration(total)}{view.devices.length > 1 ? <small class='muted'> на {view.devices.length} планшетах</small> : null}</div>
+        </section>
+        {view.devices.length === 0 ? <ChildDevices /> : null}
+        {view.newApps.length > 0 || (view.apps ?? []).length > 0 ? <h2 class='section'>Приложения <a class='small' href='#/apps'>все</a></h2> : null}
+        {view.newApps.map((app) => <NewAppRow key={app.packageName} app={app} categories={categories} />)}
+        <section class='list'>
+          {(view.apps ?? []).map((app) => <AppRow key={app.packageName} app={app} max={max} />)}
+        </section>
+        {view.appUsageProblem ? <p class='muted small'>Время по приложениям недоступно: {view.appUsageProblem}</p> : null}
+      </div>
+      <div>
+        <ModeBox />
+        <Allowances />
+        <h2 class='section'>Категории</h2>
+        <section class='list'>
+          {view.categories.map((category) => <CategoryRow key={category.id} category={category} />)}
+        </section>
+        {view.devices.length > 0 ? <ChildDevices /> : null}
+      </div>
+    </div>
   )
 }
 
@@ -117,22 +133,20 @@ function Allowances () {
 
 /** Devices of the child and devices that joined but have no user yet; the entry to connecting another one. */
 function ChildDevices () {
-  const { family, child } = useApp()
   const view = useScreen<NowView>()
-  const users = new Set([...family.children, ...family.parents].map((person) => person.id))
-  const own = view.devices
-  const unassigned = family.devices.filter((device) => !users.has(device.currentUserId))
+  if (view.devices.length === 0) {
+    return (
+      <section class='card'>
+        <p><b>Детский планшет ещё не подключён</b> — пока ограничивать нечего.</p>
+        <button type='button' class='primary wide' onClick={() => { location.hash = '#/device' }}>Подключить планшет</button>
+      </section>
+    )
+  }
   return (
-    <section class='card'>
-      {own.length === 0
-        ? <p><b>Детское устройство ещё не подключено</b> — пока ограничивать нечего.</p>
-        : <h2>Устройства: {child.name}</h2>}
-      {own.length > 0 ? <ul class='plain'>{own.map((d) => <li key={d.deviceId}>{d.name} <span class='muted small'>{d.model}</span></li>)}</ul> : null}
-      {unassigned.length > 0
-        ? <p class='muted small'>Подключены, но пользователь не выбран: {unassigned.map((d) => `«${d.name}»`).join(', ')} — выберите «{child.name}» на самом устройстве.</p>
-        : null}
-      <button type='button' class={own.length === 0 ? 'primary wide' : 'wide'} onClick={() => { location.hash = '#/device' }}>Подключить устройство</button>
-    </section>
+    <>
+      <h2 class='section'>Планшеты <a class='small' href='#/tablets'>все</a></h2>
+      <ul class='plain card'>{view.devices.map((device) => <DeviceLine key={device.deviceId} device={device} />)}</ul>
+    </>
   )
 }
 

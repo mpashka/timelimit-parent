@@ -1,3 +1,5 @@
+import type { AppUsageItem } from '../core/api.ts'
+import { appCard, appTimes, appTitle, deviceStatus, newApps, usageDays } from '../core/apps.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import { dailyLimitRules } from '../core/operations.ts'
 import { childOverview, findChild, usageHistory } from '../core/overview.ts'
@@ -33,6 +35,36 @@ export interface ViewContext {
    */
   serverUrl: string
   signedInUserId: string
+  /** Time per app for the child's last seven days, fetched for the views that show it; `problem` says why it is missing. */
+  appUsage?: { items: AppUsageItem[] } | { problem: string }
+}
+
+/** Views that need `/parent/get-app-usage`; the server answers it separately from the sync status. */
+export const USAGE_VIEWS = ['now', 'apps', 'devices']
+export const needsAppUsage = (name: string): boolean => USAGE_VIEWS.includes(name) || name.startsWith('app/')
+
+const usageItems = (context: ViewContext): AppUsageItem[] | null =>
+  context.appUsage !== undefined && 'items' in context.appUsage ? context.appUsage.items : null
+const usageProblem = (context: ViewContext): string | null =>
+  context.appUsage !== undefined && 'problem' in context.appUsage ? context.appUsage.problem : null
+
+// @tag:app-usage @tag:new-app @tag:device-state
+function appsToday (context: ViewContext, childId: string) {
+  const usage = usageItems(context)
+  const { toDay } = usageDays(context.state, childId, context.now)
+  return {
+    apps: usage === null ? null : appTimes(context.state, childId, usage, toDay, toDay),
+    newApps: newApps(context.state, childId),
+    appUsageProblem: usageProblem(context)
+  }
+}
+
+function devicesOf (context: ViewContext, childId: string) {
+  const usage = usageItems(context)
+  const { toDay } = usageDays(context.state, childId, context.now)
+  return context.state.devices.data
+    .filter((device) => device.currentUserId === childId)
+    .map((device) => ({ ...device, status: deviceStatus(context.state, device.deviceId, context.now, usage, toDay) }))
 }
 
 const HISTORY_DAYS = 7
@@ -49,27 +81,73 @@ function dayEndsAt (context: ViewContext, bans: Array<{ days: number, start: num
   return { dayEndsAt: sleep !== null && sleep.start > context.now && sleep.start < midnight + 6 * 3600_000 ? sleep.start : midnight, sleep }
 }
 
-const appTitle = (context: ViewContext, packageName: string): string => {
-  for (const item of Object.values(context.state.installedApps)) {
-    const found = item.apps.find((app) => app.packageName === packageName)
-    if (found) return found.title
-  }
-  return packageName
-}
-
 const viewNow = (context: ViewContext) => {
   const childId = requireChild(context)
   const overview = childOverview(context.state, childId, context.now)
   // @tag:app-allowance
   const allowances = (overview.child.appAllowances ?? [])
     .filter((item) => item.until > context.now)
-    .map((item) => ({ ...item, title: appTitle(context, item.packageName) }))
+    .map((item) => ({ ...item, title: appTitle(context.state, item.packageName) }))
   return {
     ...overview,
     ...dayEndsAt(context, overview.bans, overview.child.timeZone),
     allowances,
     activeSchedule: overview.bans.filter((ban) => ban.activeNow).map((ban) => scheduleKind(ban)).find((kind) => kind !== null) ?? null,
-    devices: context.state.devices.data.filter((device) => device.currentUserId === childId)
+    ...appsToday(context, childId),
+    devices: devicesOf(context, childId)
+  }
+}
+
+// @tag:app-usage
+const viewApps = (context: ViewContext) => {
+  const childId = requireChild(context)
+  const { fromDay, toDay } = usageDays(context.state, childId, context.now)
+  const usage = usageItems(context)
+  const categories = childCategories(context.state, childId)
+  const child = context.state.users.data.find((user) => user.id === childId)!
+  const week = usage === null ? [] : appTimes(context.state, childId, usage, fromDay, toDay)
+  const rules = new Map((child.appRules ?? []).map((rule) => [rule.packageName, rule]))
+  const row = (packageName: string) => {
+    const rule = rules.get(packageName)
+    return {
+      packageName,
+      title: week.find((item) => item.packageName === packageName)?.title ?? packageName,
+      weekMs: week.find((item) => item.packageName === packageName)?.ms ?? 0,
+      rule: rule === undefined ? null : { days: rule.days, limitMinutes: rule.limitMinutes }
+    }
+  }
+  const assigned = new Set(categories.flatMap((category) => category.apps))
+  return {
+    child,
+    newApps: newApps(context.state, childId),
+    categories: categories.map((category) => ({
+      id: category.id,
+      title: category.base.title,
+      apps: [...new Set([...category.apps.filter((app) => !app.includes(':')), ...week.filter((item) => item.category?.id === category.id).map((item) => item.packageName)])]
+        .map(row)
+        .sort((a, b) => b.weekMs - a.weekMs)
+    })),
+    other: week.filter((item) => !assigned.has(item.packageName)).map((item) => row(item.packageName)),
+    appUsageProblem: usageProblem(context)
+  }
+}
+
+const viewApp = (packageName: string, context: ViewContext) => {
+  const childId = requireChild(context)
+  return { ...appCard(context.state, childId, packageName, context.now, usageItems(context)), appUsageProblem: usageProblem(context) }
+}
+
+// @tag:device-state
+const viewDevices = (context: ViewContext) => {
+  const childId = requireChild(context)
+  const users = new Set(context.state.users.data.map((user) => user.id))
+  const { toDay } = usageDays(context.state, childId, context.now)
+  return {
+    devices: devicesOf(context, childId),
+    unassigned: context.state.devices.data
+      .filter((device) => !users.has(device.currentUserId))
+      .map((device) => ({ ...device, status: deviceStatus(context.state, device.deviceId, context.now, null, toDay) })),
+    appUsageProblem: usageProblem(context)
   }
 }
 
@@ -95,7 +173,7 @@ const viewRequests = (context: ViewContext) => {
     return {
       id: request.id,
       packageName: request.packageName,
-      title: appTitle(context, request.packageName),
+      title: appTitle(context.state, request.packageName),
       device: deviceNames.get(request.deviceId) ?? 'удалённый планшет',
       word: request.word,
       createdAt: request.createdAt,
@@ -193,12 +271,15 @@ const views: Record<string, (context: ViewContext) => unknown> = {
   history: viewHistory,
   sites: viewSites,
   requests: viewRequests,
+  apps: viewApps,
+  devices: viewDevices,
   code: viewCode,
   family: viewFamily
 }
 
 export function buildView (name: string, context: ViewContext): unknown {
   if (name.startsWith('category/')) return viewCategory(name.slice('category/'.length), context)
+  if (name.startsWith('app/')) return viewApp(decodeURIComponent(name.slice('app/'.length)), context)
   const build = views[name]
   if (!build) {
     throw new ParentConsoleError(`no such view: ${name}`, `known views: ${Object.keys(views).join(', ')}, category/<id>`)

@@ -232,6 +232,14 @@ export interface SerializedSetAppAllowanceAction {
   until: number
 }
 
+export interface SerializedSetAppRuleAction {
+  type: 'SET_APP_RULE'
+  userId: string
+  packageName: string
+  days: number
+  limitMinutes: number
+}
+
 export interface SerializedSetCategoryExtraTimeAction {
   type: 'SET_CATEGORY_EXTRA_TIME'
   categoryId: string
@@ -458,6 +466,14 @@ export interface ServerAppAllowance {
   until: number
 }
 
+export interface ServerAppRule {
+  packageName: string
+  days: number
+  limitMinutes: number
+  usedDay: number
+  usedMs: number
+}
+
 export interface ServerCategoryNetworkId {
   itemId: string
   hashedNetworkId: string
@@ -521,6 +537,13 @@ export interface ServerDeviceList {
   data: Array<ServerDeviceData>
 }
 
+export interface ServerDeviceState {
+  deviceId: string
+  seen: number
+  app: string
+  appSince: number
+}
+
 export interface ServerDhKey {
   v: string
   k: string
@@ -557,6 +580,14 @@ export interface ServerKeyResponse {
   tempKey: string
   cryptKey: string
   signature: string
+}
+
+export interface ServerNewApp {
+  packageName: string
+  title: string
+  section: string
+  installedAt: number
+  deviceId: string
 }
 
 export interface ServerPing {
@@ -675,6 +706,8 @@ export interface ServerUserEntry {
   urlFilter?: UrlFilter
   requests?: Array<ServerChildRequest>
   appAllowances?: Array<ServerAppAllowance>
+  appRules?: Array<ServerAppRule>
+  newApps?: Array<ServerNewApp>
 }
 
 export interface ServerUserList {
@@ -715,6 +748,7 @@ export interface ServerDataStatus {
   krq?: Array<ServerKeyRequest>
   kr?: Array<ServerKeyResponse>
   pings?: Array<ServerPing>
+  deviceStates?: Array<ServerDeviceState>
   dh?: ServerDhKey
   u2f?: U2fData
   fullVersion: number
@@ -784,6 +818,7 @@ export type SerializedParentAction =
   | SerializedUpdateUserUrlFilterAction
   | SerializedAnswerChildRequestAction
   | SerializedSetAppAllowanceAction
+  | SerializedSetAppRuleAction
   | SerializedUpdateUserLimitLoginCategory
   | SerializedUpdateUserLimitLoginPreBlockDuration
 

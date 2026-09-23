@@ -1,15 +1,14 @@
 import { useState } from 'preact/hooks'
 import type { RequestItem, RequestsView } from './api.ts'
 import { clockOf, formatDuration, formatUntil } from './format.ts'
-import { ActionButton, useApp, useScreen } from './ui.tsx'
+import { ActionButton, useApp } from './ui.tsx'
 
 // @tag:child-request
 
 const MINUTE = 60000
 const DURATIONS = [15, 30, 60]
 
-export function Requests () {
-  const view = useScreen<RequestsView>()
+export function Requests ({ view }: { view: RequestsView }) {
   const { child } = useApp()
   if (!view.supported) {
     return <p class='muted'>Сервер синхронизации ещё не умеет просьбы — его надо обновить.</p>
@@ -19,7 +18,7 @@ export function Requests () {
       <h2 class='section'>Ждёт ответа</h2>
       {view.waiting.length === 0
         ? <p class='muted'>{child.name} сейчас ничего не просит.</p>
-        : view.waiting.map((request) => <RequestCard key={request.id} request={request} />)}
+        : view.waiting.map((request) => <RequestCard key={request.id} request={request} view={view} />)}
       {view.earlier.length > 0
         ? (
           <>
@@ -43,9 +42,8 @@ function outcome (request: RequestItem): string {
   return `${what} до ${clockOf(answer.until)} · ${who}`
 }
 
-function RequestCard ({ request }: { request: RequestItem }) {
+function RequestCard ({ request, view }: { request: RequestItem, view: RequestsView }) {
   const { now, child } = useApp()
-  const view = useScreen<RequestsView>()
   const tz = view.child.timeZone
   const [scope, setScope] = useState<'app' | 'category'>('app')
   const category = request.category

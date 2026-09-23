@@ -1,4 +1,4 @@
-import type { AddDeviceToken, TimelimitApi } from './api.ts'
+import type { AddDeviceToken, AppUsageItem, TimelimitApi } from './api.ts'
 import { ParentConsoleError } from './errors.ts'
 import type { ParentAction, PushActionItem } from './protocol.ts'
 import { createEmptyState, type FamilyState, findParentOfDevice, mergeServerStatus, toClientStatus } from './state.ts'
@@ -125,6 +125,12 @@ export class SyncClient {
     const parentId = this.parentUserId(await this.sync())
     await this.api.removeDevice({ deviceAuthToken: this.subject.authToken, parentId, deviceId })
     return this.sync()
+  }
+
+  // @tag:app-usage
+  async appUsage (userId: string, fromDay: number, toDay: number): Promise<AppUsageItem[]> {
+    const parentId = this.parentUserId(await this.loadCachedState())
+    return this.api.getAppUsage({ deviceAuthToken: this.subject.authToken, parentId, userId, fromDay, toDay })
   }
 
   private async nextSequenceNumber (): Promise<number> {

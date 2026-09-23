@@ -1,6 +1,6 @@
 import { CLIENT_LEVEL } from './api.ts'
 import type {
-  ClientDataStatus, InstalledApp, ServerCategoryBase, ServerDataStatus, ServerDevice, ServerRule, ServerUser, UsedTimeItem
+  ClientDataStatus, DeviceState, InstalledApp, ServerCategoryBase, ServerDataStatus, ServerDevice, ServerRule, ServerUser, UsedTimeItem
 } from './protocol.ts'
 
 // @tag:parent-console
@@ -24,6 +24,7 @@ export interface FamilyState {
   users: { version: string, data: User[], parentCodeSecret?: string }
   installedApps: Record<string, { version: string, apps: InstalledApp[] }>
   categories: Record<string, Category>
+  deviceStates?: DeviceState[]
 }
 
 export const createEmptyState = (): FamilyState => ({
@@ -62,6 +63,7 @@ export function mergeServerStatus (previous: FamilyState, status: ServerDataStat
   state.message = status.message
 
   if (status.devices) state.devices = status.devices
+  if (status.deviceStates) state.deviceStates = status.deviceStates
   if (status.users) {
     state.users = {
       version: status.users.version,

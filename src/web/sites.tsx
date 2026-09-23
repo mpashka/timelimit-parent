@@ -1,76 +1,100 @@
 import { useState } from 'preact/hooks'
 import type { SitesView, UrlFilter } from './api.ts'
-import { filterLines } from './format.ts'
-import { ActionButton, SubmitButton, useApp, useBusy, useScreen } from './ui.tsx'
+import { ActionButton, useApp, useScreen, type Work } from './ui.tsx'
 
-// @tag:parent-console
+// @tag:parent-console @tag:url-filter
+
+const EVERYTHING = '*'
+
+/** Chrome's own filter format; a pasted address loses its scheme and trailing slash so that lists stay readable. */
+const normalize = (text: string): string => text.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '')
 
 export function Sites () {
   const { child, family, run } = useApp()
   const view = useScreen<SitesView>()
   const saved = view.urlFilter
-  const [allow, setAllow] = useState<string | null>(null)
-  const [block, setBlock] = useState<string | null>(null)
-  const [phase, wrap] = useBusy()
-  const supported = view.supported
-  const allowText = allow ?? saved.allow.join('\n')
-  const blockText = block ?? saved.block.join('\n')
-  const dirty = allowText !== saved.allow.join('\n') || blockText !== saved.block.join('\n')
+  const [address, setAddress] = useState('')
+  const onlyAllowed = saved.block.includes(EVERYTHING)
+  const blocked = saved.block.filter((item) => item !== EVERYTHING)
 
-  const work = (filter: UrlFilter, key: string, done: string) => ({
+  const work = (filter: UrlFilter, key: string, done: string): Work => ({
     key,
     intent: 'filter-set',
     body: { filter },
     done,
     undo: () => ({ intent: 'filter-set', body: { filter: saved } })
   })
+  const add = (list: 'allow' | 'block') => {
+    const site = normalize(address)
+    if (site === '') return
+    const allow = saved.allow.filter((item) => item !== site)
+    const block = saved.block.filter((item) => item !== site)
+    const filter = { enabled: true, allow: list === 'allow' ? [...allow, site] : allow, block: list === 'block' ? [...block, site] : block }
+    void run(work(filter, `add-${list}`, list === 'allow' ? `${site} разрешён` : `${site} запрещён`)).then((ok) => { if (ok) setAddress('') })
+  }
+  const remove = (list: 'allow' | 'block', site: string) => () =>
+    work({ ...saved, [list]: saved[list].filter((item) => item !== site) }, `remove-${list}-${site}`, `${site} убран из списка`)
+  const mode = (only: boolean) => () => work(
+    { ...saved, enabled: true, block: only ? [EVERYTHING, ...blocked] : blocked },
+    `mode-${only}`,
+    only ? 'Открываются только разрешённые сайты' : 'Открывается всё, кроме запрещённых'
+  )
+
+  if (!view.supported) {
+    return (
+      <div class='error' role='alert'>
+        <div>Сервер не умеет фильтр сайтов: у него apiLevel {family.apiLevel}.</div>
+        <div class='muted'>Старый сервер молча выбросит настройку. Обновите сервер — экран заработает сам.</div>
+      </div>
+    )
+  }
 
   return (
     <>
-      {!supported
+      <p class='muted small'>Сайты в Chrome на всех планшетах {child.name}.</p>
+      {!saved.enabled
         ? (
-          <div class='error' role='alert'>
-            <div>Сервер не умеет фильтр сайтов: у него apiLevel {family.apiLevel}.</div>
-            <div class='muted'>Старый сервер молча выбросит настройку. Обновите сервер до ветки parent-console — экран заработает сам.</div>
-          </div>
-          )
-        : null}
-      <section class='card'>
-        <div class='row'>
-          <h2>Фильтр сайтов в Chrome</h2>
-          <ActionButton class={saved.enabled ? 'primary' : ''} disabled={!supported}
-            work={() => work({ ...saved, enabled: !saved.enabled }, 'filter-enabled', saved.enabled ? 'Фильтр сайтов выключен' : 'Фильтр сайтов включён')}>
-            {saved.enabled ? 'Включён' : 'Выключен'}
-          </ActionButton>
-        </div>
-        <p class='muted small'>Нажатие переключает. Применяется на всех устройствах, где {child.name} — текущий пользователь.</p>
-      </section>
-      <form class='card form' onSubmit={(event) => {
-        event.preventDefault()
-        const filter = { enabled: saved.enabled, allow: filterLines(allowText), block: filterLines(blockText) }
-        const item = work(filter, 'filter-lists', 'Списки сайтов сохранены')
-        void wrap(async () => { if (await run(item)) { setAllow(null); setBlock(null) } })
-      }}>
-        <p class='muted small'>
-          По одной записи в строке, формат фильтров Chrome: <code>[схема://][.]хост[:порт][/путь]</code>.
-          Например, <code>google.com/search</code> запрещает поиск, но не сам google.com; <code>*</code> в запрещённых — всё, кроме разрешённых.
-          До 1000 записей в списке, каждая до 256 символов.
-        </p>
-        <label>Разрешённые
-          <textarea rows={5} disabled={!supported} value={allowText} placeholder={'wikipedia.org\nschool.example.ru'} onInput={(e) => setAllow(e.currentTarget.value)} />
-        </label>
-        <label>Запрещённые
-          <textarea rows={5} disabled={!supported} value={blockText} placeholder={'google.com/search\nyoutube.com'} onInput={(e) => setBlock(e.currentTarget.value)} />
-        </label>
-        {dirty
-          ? (
-            <div class='chips'>
-              <SubmitButton phase={phase} disabled={!supported}>Сохранить списки</SubmitButton>
-              <button type='button' onClick={() => { setAllow(null); setBlock(null) }}>Отмена</button>
+          <section class='card'>
+            <div class='row'>
+              <span><b>Фильтр сайтов выключен</b> — открывается всё.</span>
+              <ActionButton class='primary' work={() => work({ ...saved, enabled: true }, 'filter-on', 'Фильтр сайтов включён')}>Включить</ActionButton>
             </div>
-            )
-          : null}
+          </section>
+          )
+        : (
+          <div class='segmented' role='tablist'>
+            <ActionButton class={onlyAllowed ? '' : 'primary'} disabled={!onlyAllowed} work={mode(false)}>Всё, кроме запрещённых</ActionButton>
+            <ActionButton class={onlyAllowed ? 'primary' : ''} disabled={onlyAllowed} work={mode(true)}>Только разрешённые</ActionButton>
+          </div>
+          )}
+      <form class='card site-add' onSubmit={(event) => { event.preventDefault(); add('allow') }}>
+        <input type='text' inputMode='url' autoFocus placeholder='scratch.mit.edu' value={address} onInput={(event) => setAddress(event.currentTarget.value)} />
+        <button type='submit' class='primary' disabled={normalize(address) === ''}>Разрешить</button>
+        <button type='button' disabled={normalize(address) === ''} onClick={() => add('block')}>Запретить</button>
       </form>
+      <SiteList title='Разрешены' items={saved.allow} remove={(site) => remove('allow', site)} />
+      <SiteList title='Запрещены' items={blocked} remove={(site) => remove('block', site)} />
+      <p class='muted small'>
+        Формат фильтров Chrome: <code>google.com/search</code> запрещает поиск, но не сам google.com.
+        {saved.enabled ? <> · <ActionButton class='link small' work={() => work({ ...saved, enabled: false }, 'filter-off', 'Фильтр сайтов выключен')}>выключить фильтр</ActionButton></> : null}
+      </p>
     </>
+  )
+}
+
+function SiteList ({ title, items, remove }: { title: string, items: string[], remove: (site: string) => () => Work }) {
+  if (items.length === 0) return null
+  return (
+    <section class='card'>
+      <h2>{title} · {items.length}</h2>
+      <ul class='plain'>
+        {items.map((site) => (
+          <li key={site} class='row'>
+            <span>{site}</span>
+            <ActionButton class='link' work={remove(site)}><span aria-label={`убрать ${site}`}>✕</span></ActionButton>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }

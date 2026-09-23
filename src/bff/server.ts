@@ -7,7 +7,9 @@ import { SyncClient } from '../core/session.ts'
 import { describeFailure, SessionGoneError } from './failures.ts'
 import { BadRequestError, buildIntent } from './intents.ts'
 import { type BffStore, type StoredSession } from './store.ts'
-import { buildView, type ViewContext } from './views.ts'
+import { usageDays } from '../core/apps.ts'
+import { findChild } from '../core/overview.ts'
+import { buildView, needsAppUsage, type ViewContext } from './views.ts'
 
 // @tag:parent-console
 
@@ -171,7 +173,9 @@ export class Bff {
   private async handleView (name: string, url: URL, request: IncomingMessage, response: ServerResponse): Promise<void> {
     const session = this.requireSession(request)
     const { state, staleSince } = await this.stateOf(session)
-    const data = buildView(name, this.viewContext(session, state, url, request))
+    const context = this.viewContext(session, state, url, request)
+    if (needsAppUsage(name)) context.appUsage = await this.appUsageOf(session, context)
+    const data = buildView(name, context)
     send(response, 200, staleSince === undefined ? { data } : { data, staleSince })
   }
 
@@ -188,7 +192,27 @@ export class Bff {
     })
     this.notify(session.cookieId)
     const view = typeof body.view === 'string' ? body.view : undefined
-    send(response, 200, view ? { data: buildView(view, this.viewContext(session, result, url, request)) } : { ok: true })
+    if (!view) return send(response, 200, { ok: true })
+    const context = this.viewContext(session, result, url, request)
+    if (typeof body.child === 'string') context.childId = body.child
+    if (needsAppUsage(view)) context.appUsage = await this.appUsageOf(session, context)
+    send(response, 200, { data: buildView(view, context) })
+  }
+
+  /**
+   * Time per app is not in the sync status, so it is asked for per view. A server without it does
+   * not break the screen: the view says why the column is empty.
+   */
+  // @tag:app-usage
+  private async appUsageOf (session: StoredSession, context: ViewContext): Promise<ViewContext['appUsage']> {
+    const childId = findChild(context.state, context.childId).id
+    const { fromDay, toDay } = usageDays(context.state, childId, context.now)
+    try {
+      return { items: await this.clientFor(session).appUsage(childId, fromDay, toDay) }
+    } catch (error) {
+      const { failure } = describeFailure(error)
+      return { problem: failure.hint ? `${failure.title} — ${failure.hint}` : failure.title }
+    }
   }
 
   private viewContext (session: StoredSession, state: FamilyState, url: URL, request: IncomingMessage): ViewContext {

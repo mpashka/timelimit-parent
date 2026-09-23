@@ -38,6 +38,9 @@ type StatusHints = Record<number, string>
 
 const unauthorizedHint = 'the device token is unknown to the server: the parent device was removed or the token is wrong — run `login` again'
 
+/** One app's total on one day on one device — `POST /parent/get-app-usage`, docs/specification/protocol-new-ui.md §4. */
+export interface AppUsageItem { deviceId: string, day: number, packageName: string, ms: number }
+
 export class TimelimitApi {
   readonly serverUrl: string
   private readonly fetchImpl: typeof fetch
@@ -153,6 +156,21 @@ export class TimelimitApi {
       { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', deviceId },
       { 401: unauthorizedHint, 409: `device ${deviceId} is not in the family (already removed?) — see \`device list\`` }
     )
+  }
+
+  // @tag:app-usage
+  async getAppUsage ({ deviceAuthToken, parentId, userId, fromDay, toDay }: {
+    deviceAuthToken: string, parentId: string, userId: string, fromDay: number, toDay: number
+  }): Promise<AppUsageItem[]> {
+    const answer = await this.post<{ items: AppUsageItem[] }>(
+      '/parent/get-app-usage',
+      { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', userId, fromDay, toDay },
+      { 401: unauthorizedHint, 404: 'the sync server predates time per app (apiLevel 12, branch new-ui) — update it' }
+    )
+    if (!Array.isArray(answer.items)) {
+      throw new ParentConsoleError('/parent/get-app-usage answered without items', 'the sync server predates time per app (apiLevel 12, branch new-ui) — update it')
+    }
+    return answer.items
   }
 
   async pullStatus ({ deviceAuthToken, status }: { deviceAuthToken: string, status: ClientDataStatus }): Promise<ServerDataStatus> {
