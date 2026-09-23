@@ -20,6 +20,17 @@ export interface CategoryDataStatus {
   tasks?: string
 }
 
+export interface ChildRequestAnswer {
+  kind: ChildRequestAnswerKind
+  until: number
+  word: string
+  parentUserId: string
+  at: number
+  repeatAfter: number
+}
+
+export type ChildRequestAnswerKind = 'app' | 'category' | 'deny'
+
 export interface ClientDataStatus {
   devices: string
   apps: Record<string, string>
@@ -96,6 +107,14 @@ export interface SerializedAddUserAction {
   userId: string
   password?: EncryptableParentPassword
   timeZone: string
+}
+
+export interface SerializedAnswerChildRequestAction {
+  type: 'ANSWER_CHILD_REQUEST'
+  requestId: string
+  answer: ChildRequestAnswerKind
+  until: number
+  word: string
 }
 
 export interface SerializedAppActivityItem {
@@ -204,6 +223,13 @@ export interface SerializedReviewChildTaskAction {
   ok: boolean
   time: number
   day?: number
+}
+
+export interface SerializedSetAppAllowanceAction {
+  type: 'SET_APP_ALLOWANCE'
+  userId: string
+  packageName: string
+  until: number
 }
 
 export interface SerializedSetCategoryExtraTimeAction {
@@ -427,9 +453,25 @@ export interface SerializedUpdateUserUrlFilterAction {
   block: Array<string>
 }
 
+export interface ServerAppAllowance {
+  packageName: string
+  until: number
+}
+
 export interface ServerCategoryNetworkId {
   itemId: string
   hashedNetworkId: string
+}
+
+export interface ServerChildRequest {
+  id: string
+  packageName: string
+  categoryId: string
+  deviceId: string
+  word: string
+  createdAt: number
+  expiresAt: number
+  answer?: ChildRequestAnswer
 }
 
 export interface ServerCryptContainer {
@@ -631,11 +673,14 @@ export interface ServerUserEntry {
   llc?: string
   pbd?: number
   urlFilter?: UrlFilter
+  requests?: Array<ServerChildRequest>
+  appAllowances?: Array<ServerAppAllowance>
 }
 
 export interface ServerUserList {
   version: string
   data: Array<ServerUserEntry>
+  parentCodeSecret?: string
 }
 
 export interface U2fData {
@@ -737,6 +782,8 @@ export type SerializedParentAction =
   | SerializedUpdateTimelimitRuleAction
   | SerializedUpdateUserFlagsAction
   | SerializedUpdateUserUrlFilterAction
+  | SerializedAnswerChildRequestAction
+  | SerializedSetAppAllowanceAction
   | SerializedUpdateUserLimitLoginCategory
   | SerializedUpdateUserLimitLoginPreBlockDuration
 

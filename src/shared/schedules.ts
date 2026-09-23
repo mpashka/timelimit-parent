@@ -1,3 +1,5 @@
+import { localTime, timestampAt } from './time.ts'
+
 // @tag:ban-schedule
 
 export type ScheduleKind = 'sleep' | 'study'
@@ -22,4 +24,27 @@ export function scheduleKind ({ start, end }: { start: number, end: number }): S
 export const SCHEDULE_SHAPE_HINT: Record<ScheduleKind, string> = {
   sleep: 'сон идёт через полночь или до 24:00, начинаясь не раньше 18:00',
   study: 'учёба лежит внутри дня: начало не раньше 05:00, конец не позже 18:00'
+}
+
+/**
+ * The sleep that is on now or starts next, over the next two days. Its start is where «до конца дня»
+ * ends (ui-contract, «Решения 2026-09-23»), its end is «до утра». With several sleep bans — one per
+ * category with its own morning — the earliest start wins.
+ */
+export function sleepWindow (bans: Array<{ days: number, start: number, end: number }>, now: number, timeZone: string): { start: number, end: number } | null {
+  const local = localTime(now, timeZone)
+  let best: { start: number, end: number } | null = null
+  for (const ban of bans) {
+    if (scheduleKind(ban) !== 'sleep') continue
+    for (const offset of [-1, 0, 1, 2]) {
+      const weekday = (local.dayOfWeek + offset + 7) % 7
+      if ((ban.days & (1 << weekday)) === 0) continue
+      const day = local.dayOfEpoch + offset
+      const start = timestampAt({ dayOfEpoch: day, minuteOfDay: ban.start }, timeZone)
+      const end = timestampAt({ dayOfEpoch: day + (ban.start > ban.end ? 1 : 0), minuteOfDay: ban.end + 1 }, timeZone)
+      if (end <= now) continue
+      if (best === null || start < best.start) best = { start, end }
+    }
+  }
+  return best
 }

@@ -1,29 +1,35 @@
 /* @tag:parent-console */
 :root {
-  --bg: #f6f5f1;
+  --bg: #f3f4f7;
   --card: #ffffff;
-  --text: #1d1d1b;
-  --muted: #6b6a64;
-  --line: #dedcd4;
-  --accent: #2f6f4f;
+  --text: #151924;
+  --muted: #5e6475;
+  --line: #dde0e7;
+  --accent: #2c5bd8;
   --accent-text: #ffffff;
-  --warn: #9a3b12;
-  --warn-bg: #fbeee6;
-  --chip: #eeede7;
+  --warn: #c9820a;
+  --warn-bg: #fbf1de;
+  --chip: #eceef3;
+  --ok: #1e8a5a;
+  --closed: #6b5bd2;
+  --deny: #c2412d;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #161614;
-    --card: #22221f;
-    --text: #ecebe6;
-    --muted: #a3a29b;
-    --line: #3a3934;
-    --accent: #6cbf93;
-    --accent-text: #10241a;
-    --warn: #f0a37d;
-    --warn-bg: #3a2519;
-    --chip: #2f2e2a;
+    --bg: #0f1218;
+    --card: #181c25;
+    --text: #e8eaf0;
+    --muted: #9aa1b2;
+    --line: #2a303c;
+    --accent: #7c98ff;
+    --accent-text: #0f1218;
+    --warn: #e7a93a;
+    --warn-bg: #2e2514;
+    --chip: #232835;
+    --ok: #47c28a;
+    --closed: #9c8ff0;
+    --deny: #ee7a64;
   }
 }
 * { box-sizing: border-box; }
@@ -130,3 +136,41 @@ th, td { text-align: left; padding: 4px 10px 4px 0; border-bottom: 1px solid var
 .steps { padding-left: 20px; margin: 8px 0; }
 .steps li { margin: 4px 0; }
 ul.plain { list-style: none; padding: 0; margin: 6px 0 10px; }
+
+/* @tag:child-request @tag:parent-code — шапка нового интерфейса: ребёнок, код родителя, колокольчик */
+.top { justify-content: flex-start; }
+.top .who { flex: 1; }
+.code { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.code small { display: block; font-size: .7rem; color: var(--muted); line-height: 1; }
+.code .digits { font-weight: 700; font-size: 1.05rem; letter-spacing: .04em; }
+.ring { width: 28px; height: 28px; }
+.ring circle { fill: none; stroke-width: 3; }
+.ring .track { stroke: var(--line); }
+.ring .arc { stroke: var(--accent); stroke-linecap: round; }
+.bell { position: relative; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border-radius: 12px; color: var(--text); }
+.bell.open { background: var(--chip); }
+.bell svg { width: 24px; height: 24px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.bell .count { position: absolute; top: 4px; right: 4px; min-width: 18px; height: 18px; border-radius: 9px; background: var(--deny); color: #fff; font-size: .72rem; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 4px; }
+.account-menu { position: relative; }
+.account-menu summary { list-style: none; cursor: pointer; min-width: 36px; min-height: 44px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; color: var(--muted); }
+.account-menu summary::-webkit-details-marker { display: none; }
+.account-menu .card { position: absolute; right: 0; top: 44px; width: min(18rem, 80vw); z-index: 3; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.hero { margin: 4px 2px 12px; }
+.hero .big { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mode b { font-weight: 600; }
+.mode.closed { border-color: var(--closed); }
+.mode.closed b { color: var(--closed); }
+button.closer { color: var(--closed); }
+h2.section { font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 2px 8px; }
+.request h3 { margin: 0; font-size: 1.05rem; }
+.quote { margin: 8px 0; padding: 8px 10px; background: var(--chip); border-radius: 10px; font-style: italic; }
+.facts { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0; font-size: .9rem; }
+.facts dt { color: var(--muted); }
+.facts dd { margin: 0; font-weight: 600; }
+.scope { margin: 8px 0; }
+.durations { display: grid; grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr)); gap: 6px; margin: 6px 0 10px; }
+.durations button { flex-direction: column; gap: 0; }
+.durations small { color: var(--muted); font-size: .75rem; }
+button.deny { color: var(--deny); background: none; }
+.past li { padding: 4px 0; }
+.durations b { white-space: nowrap; }

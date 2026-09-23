@@ -21,7 +21,7 @@ export interface FamilyState {
   fullVersion: number
   message?: string
   devices: { version: string, data: ServerDevice[] }
-  users: { version: string, data: User[] }
+  users: { version: string, data: User[], parentCodeSecret?: string }
   installedApps: Record<string, { version: string, apps: InstalledApp[] }>
   categories: Record<string, Category>
 }
@@ -65,6 +65,7 @@ export function mergeServerStatus (previous: FamilyState, status: ServerDataStat
   if (status.users) {
     state.users = {
       version: status.users.version,
+      parentCodeSecret: status.users.parentCodeSecret,
       data: status.users.data.map(({ password: _password, secondPasswordSalt: _salt, ...user }) => user)
     }
   }

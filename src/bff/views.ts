@@ -1,10 +1,13 @@
 import { ParentConsoleError } from '../core/errors.ts'
 import { dailyLimitRules } from '../core/operations.ts'
 import { childOverview, findChild, usageHistory } from '../core/overview.ts'
-import { PARENT_SESSION_API_LEVEL, URL_FILTER_API_LEVEL } from '../core/protocol.ts'
+import { parentCode } from '../core/parent-code.ts'
+import { NEW_UI_API_LEVEL, PARENT_SESSION_API_LEVEL, URL_FILTER_API_LEVEL } from '../core/protocol.ts'
+import { requestStatus } from '../core/requests.ts'
 import { defaultScheduleCategories } from '../core/schedules.ts'
 import { childCategories, children, type FamilyState, parents } from '../core/state.ts'
-import { scheduleKind } from '../shared/schedules.ts'
+import { scheduleKind, sleepWindow } from '../shared/schedules.ts'
+import { localTime, timestampAt } from '../shared/time.ts'
 
 // @tag:parent-console
 
@@ -39,13 +42,83 @@ function requireChild (context: ViewContext): string {
   return child.id
 }
 
+/** «До конца дня» ends where Sleep begins, and at midnight when the child has no Sleep. */
+function dayEndsAt (context: ViewContext, bans: Array<{ days: number, start: number, end: number }>, timeZone: string): { dayEndsAt: number, sleep: { start: number, end: number } | null } {
+  const sleep = sleepWindow(bans, context.now, timeZone)
+  const midnight = timestampAt({ dayOfEpoch: localTime(context.now, timeZone).dayOfEpoch + 1, minuteOfDay: 0 }, timeZone)
+  return { dayEndsAt: sleep !== null && sleep.start > context.now && sleep.start < midnight + 6 * 3600_000 ? sleep.start : midnight, sleep }
+}
+
+const appTitle = (context: ViewContext, packageName: string): string => {
+  for (const item of Object.values(context.state.installedApps)) {
+    const found = item.apps.find((app) => app.packageName === packageName)
+    if (found) return found.title
+  }
+  return packageName
+}
+
 const viewNow = (context: ViewContext) => {
   const childId = requireChild(context)
   const overview = childOverview(context.state, childId, context.now)
+  // @tag:app-allowance
+  const allowances = (overview.child.appAllowances ?? [])
+    .filter((item) => item.until > context.now)
+    .map((item) => ({ ...item, title: appTitle(context, item.packageName) }))
   return {
     ...overview,
+    ...dayEndsAt(context, overview.bans, overview.child.timeZone),
+    allowances,
+    activeSchedule: overview.bans.filter((ban) => ban.activeNow).map((ban) => scheduleKind(ban)).find((kind) => kind !== null) ?? null,
     devices: context.state.devices.data.filter((device) => device.currentUserId === childId)
   }
+}
+
+// @tag:child-request
+const viewRequests = (context: ViewContext) => {
+  const childId = requireChild(context)
+  const overview = childOverview(context.state, childId, context.now)
+  const timeZone = overview.child.timeZone
+  const today = localTime(context.now, timeZone).dayOfEpoch
+  const names = new Map(context.state.users.data.map((user) => [user.id, user.name]))
+  const deviceNames = new Map(context.state.devices.data.map((device) => [device.deviceId, device.name]))
+  const activeSchedule = overview.bans.find((ban) => ban.activeNow)
+  const describe = (request: NonNullable<typeof overview.child.requests>[number]) => {
+    const category = overview.categories.find((item) => item.id === request.categoryId) ?? null
+    const reason = category === null
+      ? 'новое приложение — ещё нет категории'
+      : category.blockedNow === 'limit-reached' ? `лимит «${category.title}» на сегодня кончился`
+        : category.blockedNow === 'temporarily-blocked' ? `родитель закрыл «${category.title}»`
+          : category.blockedNow === 'ban' || category.blockedNow === 'legacy-blocked-time'
+            ? (activeSchedule && scheduleKind(activeSchedule) === 'sleep' ? 'сейчас Сон' : activeSchedule && scheduleKind(activeSchedule) === 'study' ? 'сейчас Учёба' : 'сейчас запрет')
+            : null
+    return {
+      id: request.id,
+      packageName: request.packageName,
+      title: appTitle(context, request.packageName),
+      device: deviceNames.get(request.deviceId) ?? 'удалённый планшет',
+      word: request.word,
+      createdAt: request.createdAt,
+      expiresAt: request.expiresAt,
+      status: requestStatus(request, context.now),
+      category: category === null ? null : { id: category.id, title: category.title, usedTodayMs: category.usedTodayMs, limitNowMs: category.limitNowMs },
+      reason,
+      answer: request.answer === undefined ? null : { ...request.answer, parentName: names.get(request.answer.parentUserId) ?? 'родитель' }
+    }
+  }
+  const all = (overview.child.requests ?? []).map(describe)
+  return {
+    child: overview.child,
+    ...dayEndsAt(context, overview.bans, timeZone),
+    waiting: all.filter((item) => item.status === 'waiting'),
+    earlier: all.filter((item) => item.status !== 'waiting' && localTime(item.createdAt, timeZone).dayOfEpoch === today),
+    supported: context.state.apiLevel >= NEW_UI_API_LEVEL
+  }
+}
+
+// @tag:parent-code
+const viewCode = (context: ViewContext) => {
+  const secret = context.state.users.parentCodeSecret
+  return secret ? parentCode(secret, context.now) : null
 }
 
 const viewBans = (context: ViewContext) => {
@@ -104,6 +177,10 @@ const viewFamily = (context: ViewContext) => ({
   serverUrl: context.serverUrl,
   apiLevel: context.state.apiLevel,
   parentSessionsSupported: context.state.apiLevel >= PARENT_SESSION_API_LEVEL,
+  // @tag:child-request
+  waitingRequests: Object.fromEntries(children(context.state).map((child) => [
+    child.id, (child.requests ?? []).filter((request) => requestStatus(request, context.now) === 'waiting').length
+  ])),
   message: context.state.message
 })
 
@@ -113,6 +190,8 @@ const views: Record<string, (context: ViewContext) => unknown> = {
   limits: viewLimits,
   history: viewHistory,
   sites: viewSites,
+  requests: viewRequests,
+  code: viewCode,
   family: viewFamily
 }
 

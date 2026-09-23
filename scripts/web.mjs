@@ -60,7 +60,14 @@ function mockApi (fullStatus, path, body) {
   const shift = today - 20710
   for (const item of fixture.usedTimes) for (const t of item.times) t.day += shift
   for (const base of fixture.categoryBase) if (base.extraTimeDay >= 0) base.extraTimeDay += shift
-  fixture.apiLevel = 11
+  fixture.apiLevel = 12
+  // @tag:child-request @tag:parent-code
+  fixture.users.parentCodeSecret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
+  const asked = Date.now() - 6 * 60000
+  fixture.users.data.find((u) => u.type === 'child').requests = [{
+    id: 'rq0001', packageName: 'com.roblox.client', categoryId: 'games1', deviceId: 'devC01',
+    word: 'можно ещё полчасика, мы с Петей строим', createdAt: asked, expiresAt: asked + 30 * 60000
+  }]
   if (mockFamilyWithoutChild) hideChildren(fixture)
   switch (path) {
     case '/auth/send-mail-login-code-v2': return { mailLoginToken: 'mock' }

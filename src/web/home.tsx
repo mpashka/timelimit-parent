@@ -1,5 +1,5 @@
 import type { Ban, CategoryNow, NowView } from './api.ts'
-import { banEndsAt, formatDuration, formatUntil } from './format.ts'
+import { banEndsAt, clockOf, formatDuration, formatUntil } from './format.ts'
 import { countAdvancedOpened } from './store.ts'
 import { ActionButton, useApp, useScreen } from './ui.tsx'
 
@@ -10,18 +10,108 @@ const MINUTE = 60000
 
 export function Home () {
   const view = useScreen<NowView>()
+  const total = view.categories.filter((c) => c.depth === 0).reduce((sum, c) => sum + c.usedTodayMs, 0)
   return (
     <>
+      <section class='hero'>
+        <div class='muted small'>Сегодня</div>
+        <div class='big'>{formatDuration(total)}</div>
+      </section>
       {view.devices.length === 0 ? <ChildDevices /> : null}
-      <ChildActions />
+      <ModeBox />
+      <Allowances />
       <section class='list'>
         {view.categories.map((category) => <CategoryRow key={category.id} category={category} />)}
       </section>
       {view.devices.length > 0 ? <ChildDevices /> : null}
-      {view.unassignedApps === null
-        ? <p class='muted small'>Новые приложения без категории здесь не видны: сервер отдаёт список установленных только зашифрованным.</p>
-        : null}
     </>
+  )
+}
+
+/** What is on now and «Закрыть всё»; while closed, the way back is on the same line. */
+function ModeBox () {
+  const { now } = useApp()
+  const view = useScreen<NowView>()
+  const tz = view.child.timeZone
+  const rootViews = view.categories.filter((c) => c.depth === 0)
+  const locked = rootViews.length > 0 && rootViews.every((c) => c.temporarilyBlocked) ? rootViews : []
+  const lockedUntil = locked.length > 0 && locked.every((c) => c.temporarilyBlocked!.until) ? Math.max(...locked.map((c) => c.temporarilyBlocked!.until!)) : null
+  const activeBan = view.bans.find((ban) => ban.activeNow)
+  const morning = view.sleep?.end ?? null
+
+  // ponytail: undo of a lock lets every category go, where the old console put back exactly the
+  // blocks that were there before; one intent instead of a snapshot of the whole child
+  const lock = (until: number | null, label: string) => () => ({
+    key: `lock-${label}`,
+    intent: 'lock',
+    body: { until: until ?? undefined },
+    done: `Всё закрыто ${until ? formatUntil(until, now, tz) : 'до снятия'}`,
+    undo: () => ({ intent: 'lock', body: { off: true } })
+  })
+
+  if (locked.length > 0) {
+    return (
+      <section class='card mode closed'>
+        <div class='row'>
+          <span><b>Всё закрыто</b> {lockedUntil ? formatUntil(lockedUntil, now, tz) : 'до снятия'}</span>
+          <ActionButton class='primary' work={() => ({
+            key: 'unlock',
+            intent: 'lock',
+            body: { off: true },
+            done: 'Снова открыто',
+            undo: () => ({ intent: 'lock', body: { until: lockedUntil ?? undefined } })
+          })}>Открыть</ActionButton>
+        </div>
+      </section>
+    )
+  }
+
+  const status = view.activeSchedule === 'sleep' && morning !== null
+    ? <><b>Сейчас Сон</b> {formatUntil(morning, now, tz)}</>
+    : view.activeSchedule === 'study' && activeBan
+      ? <><b>Сейчас Учёба</b> {formatUntil(banEndsAt(activeBan, now, tz), now, tz)}</>
+      : <><b>Сейчас можно</b>{view.sleep && view.sleep.start > now ? <span class='muted'> · Сон с {clockOf(view.sleep.start)}</span> : null}</>
+  return (
+    <section class='card mode'>
+      <div>{status}</div>
+      <div class='row'>
+        <span>Закрыть всё</span>
+        <div class='chips'>
+          <ActionButton disabled={rootViews.length === 0} work={lock(now + 30 * MINUTE, '30')}>30 мин</ActionButton>
+          <ActionButton disabled={rootViews.length === 0} work={lock(now + 60 * MINUTE, '60')}>1 ч</ActionButton>
+          {morning !== null
+            ? <ActionButton disabled={rootViews.length === 0} work={lock(morning, 'morning')}>до утра</ActionButton>
+            : <ActionButton disabled={rootViews.length === 0} work={lock(null, 'off')}>до снятия</ActionButton>}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// @tag:app-allowance
+function Allowances () {
+  const { now } = useApp()
+  const view = useScreen<NowView>()
+  if (view.allowances.length === 0) return null
+  const tz = view.child.timeZone
+  return (
+    <section class='card'>
+      <h2>Разрешено поверх лимитов</h2>
+      <ul class='plain'>
+        {view.allowances.map((item) => (
+          <li key={item.packageName} class='row'>
+            <span>{item.title} <span class='muted small'>{formatUntil(item.until, now, tz)}</span></span>
+            <ActionButton class='link' work={() => ({
+              key: `allowance-off-${item.packageName}`,
+              intent: 'app-allow',
+              body: { package: item.packageName, until: 0 },
+              done: `${item.title}: разрешение снято`,
+              undo: () => ({ intent: 'app-allow', body: { package: item.packageName, until: item.until } })
+            })}>снять</ActionButton>
+          </li>
+        ))}
+      </ul>
+    </section>
   )
 }
 
@@ -42,79 +132,6 @@ function ChildDevices () {
         ? <p class='muted small'>Подключены, но пользователь не выбран: {unassigned.map((d) => `«${d.name}»`).join(', ')} — выберите «{child.name}» на самом устройстве.</p>
         : null}
       <button type='button' class={own.length === 0 ? 'primary wide' : 'wide'} onClick={() => { location.hash = '#/device' }}>Подключить устройство</button>
-    </section>
-  )
-}
-
-function ChildActions () {
-  const { now } = useApp()
-  const view = useScreen<NowView>()
-  const child = view.child
-  const tz = child.timeZone
-  const rootViews = view.categories.filter((c) => c.depth === 0)
-  const locked = rootViews.length > 0 && rootViews.every((c) => c.temporarilyBlocked) ? rootViews : []
-  const lockedUntil = locked.length > 0 && locked.every((c) => c.temporarilyBlocked!.until) ? Math.max(...locked.map((c) => c.temporarilyBlocked!.until!)) : null
-  const allowedUntil = child.disableLimitsUntil > now ? child.disableLimitsUntil : null
-
-  // ponytail: undo of a lock lets every category go, where the old console put back exactly the
-  // blocks that were there before; one intent instead of a snapshot of the whole child
-  const lock = (minutes: number | null) => () => ({
-    key: `lock-${minutes}`,
-    intent: 'lock',
-    body: { until: minutes ? now + minutes * MINUTE : undefined },
-    done: minutes ? `Заблокировано на ${formatDuration(minutes * MINUTE)}` : 'Заблокировано до снятия',
-    undo: () => ({ intent: 'lock', body: { off: true } })
-  })
-  const allowAll = (minutes: number) => () => ({
-    key: `allow-all-${minutes}`,
-    intent: 'allow',
-    body: { until: now + minutes * MINUTE },
-    done: `Всё разрешено на ${formatDuration(minutes * MINUTE)}`,
-    undo: () => ({ intent: 'allow', body: { until: child.disableLimitsUntil } })
-  })
-
-  return (
-    <section class='card actions'>
-      {locked.length > 0
-        ? (
-          <div class='row'>
-            <span><b>Заблокировано</b> {lockedUntil ? formatUntil(lockedUntil, now, tz) : 'до снятия'}</span>
-            <ActionButton class='primary' work={() => ({
-              key: 'unlock',
-              intent: 'lock',
-              body: { off: true },
-              done: 'Блокировка снята',
-              undo: () => ({ intent: 'lock', body: { until: lockedUntil ?? undefined } })
-            })}>Разблокировать</ActionButton>
-          </div>
-          )
-        : (
-          <div class='row'>
-            <span>Заблокировать</span>
-            <div class='chips'>
-              <ActionButton disabled={rootViews.length === 0} work={lock(30)}>30 мин</ActionButton>
-              <ActionButton disabled={rootViews.length === 0} work={lock(60)}>1 ч</ActionButton>
-              <ActionButton disabled={rootViews.length === 0} work={lock(null)}>до снятия</ActionButton>
-            </div>
-          </div>
-          )}
-      {allowedUntil
-        ? (
-          <div class='row'>
-            <span><b>Всё разрешено</b> {formatUntil(allowedUntil, now, tz)}</span>
-            <ActionButton work={() => ({ key: 'allow-all-off', intent: 'allow', body: { until: 0 }, done: 'Лимиты снова действуют', undo: () => ({ intent: 'allow', body: { until: allowedUntil } }) })}>Вернуть лимиты</ActionButton>
-          </div>
-          )
-        : (
-          <div class='row'>
-            <span>Разрешить всё</span>
-            <div class='chips'>
-              <ActionButton work={allowAll(20)}>20 мин</ActionButton>
-              <ActionButton work={allowAll(60)}>1 ч</ActionButton>
-              <ActionButton work={allowAll(120)}>2 ч</ActionButton>
-            </div>
-          </div>
-          )}
     </section>
   )
 }
@@ -203,6 +220,15 @@ function CategoryRow ({ category }: { category: CategoryNow }) {
           <div class='chips grants'>
             {GRANTS.map((minutes) => <ActionButton key={minutes} work={grant(minutes)}>+{minutes}</ActionButton>)}
             {activeBan ? <ActionButton class='link' work={allowFor(banEndsAt(activeBan, now, tz), 'end')}>до конца запрета</ActionButton> : null}
+            {view.sleep !== null && !category.temporarilyBlocked && category.depth === 0
+              ? <ActionButton class='closer' work={() => ({
+                key: `close-${category.id}`,
+                intent: 'lock',
+                body: { category: category.id, until: view.sleep!.end },
+                done: `«${category.title}» закрыто ${formatUntil(view.sleep!.end, now, tz)}`,
+                undo: () => ({ intent: 'lock', body: { category: category.id, off: true } })
+              })}>Закрыть до утра</ActionButton>
+              : null}
           </div>
           )
         : null}

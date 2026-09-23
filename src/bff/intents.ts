@@ -5,6 +5,7 @@ import {
   moveApp, revokeExtraTime, setDailyLimit, setUrlFilter, undoLimitApp, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild } from '../core/overview.ts'
+import { answerRequest, setAppAllowance } from '../core/requests.ts'
 import { ALL_DAYS, type ParentAction, type UrlFilter } from '../core/protocol.ts'
 import { type ScheduleBan, setScheduleActions } from '../core/schedules.ts'
 import { childCategories, type FamilyState } from '../core/state.ts'
@@ -201,6 +202,22 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
     const parsed: UrlFilter = { enabled: bool(value, 'enabled'), allow: strings(value, 'allow'), block: strings(value, 'block') }
     return setUrlFilter({ state: context.state, childId: child(context, body).id, filter: parsed })
   },
+
+  // @tag:child-request
+  'request-answer': (context, body) => {
+    const answer = str(body, 'answer')
+    if (answer !== 'app' && answer !== 'category' && answer !== 'deny') throw badRequest('answer must be app, category or deny')
+    return answerRequest({
+      state: context.state,
+      requestId: str(body, 'request'),
+      answer,
+      until: answer === 'deny' ? 0 : num(body, 'until'),
+      word: optionalStr(body, 'word') ?? ''
+    })
+  },
+
+  // @tag:app-allowance
+  'app-allow': (context, body) => setAppAllowance({ childId: child(context, body).id, packageName: str(body, 'package'), until: num(body, 'until') }),
 
   'child-add': (context, body) => addChild({ name: str(body, 'name'), timeZone: str(body, 'timeZone') }).actions
 }

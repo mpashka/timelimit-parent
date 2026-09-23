@@ -1,9 +1,10 @@
 import { render } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { type FamilyView, intent, listenChanged, loadWebConfig, signOut, type WebConfig } from './api.ts'
+import { type CodeView, type FamilyView, intent, listenChanged, loadWebConfig, signOut, type WebConfig } from './api.ts'
 import { Bans } from './bans.tsx'
 import { clockOf, errorText } from './format.ts'
 import { History } from './history.tsx'
+import { Requests } from './requests.tsx'
 import { Home } from './home.tsx'
 import { CategoryDetails, Limits } from './limits.tsx'
 import { AddChildForm, AddDevice } from './setup.tsx'
@@ -19,14 +20,14 @@ const SAFETY_RELOAD_MS = 5 * 60 * 1000
 const CLOCK_MS = 30000
 
 const tabs = [
-  { path: '', title: 'Сейчас' },
-  { path: 'bans', title: 'Запреты' },
+  { path: '', title: 'Сегодня' },
+  { path: 'bans', title: 'Режимы' },
   { path: 'limits', title: 'Лимиты' },
   { path: 'history', title: 'История' },
   { path: 'sites', title: 'Сайты' }
 ]
 
-const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', limits: 'limits', history: 'history', sites: 'sites', device: null }
+const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', limits: 'limits', history: 'history', sites: 'sites', requests: 'requests', device: null }
 
 const currentRoute = () => location.hash.replace(/^#\/?/, '')
 
@@ -90,7 +91,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   const toastId = useRef(0)
 
   const [requested, argument] = route.split('/')
-  const screen = ['bans', 'limits', 'history', 'sites', 'category', 'device'].includes(requested) ? requested : ''
+  const screen = ['bans', 'limits', 'history', 'sites', 'category', 'device', 'requests'].includes(requested) ? requested : ''
   const kids = family.children
   const child = kids.find((kid) => kid.id === childId) ?? kids[0]
   const viewName = child === undefined ? null : screen === 'category' ? `category/${argument ?? ''}` : screenViews[screen] ?? null
@@ -156,6 +157,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   const askToLeave = () => {
     if (confirm('Выйти из веб-админки? Для входа снова понадобится Google-аккаунт или код из письма.')) void leave()
   }
+  const waiting = family.waitingRequests?.[child.id] ?? 0
 
   return (
     <App.Provider value={context}>
@@ -171,9 +173,20 @@ function Console ({ family, familyStale, revision, reload, leave }: {
               </div>
               )
             : <h1>{child.name}</h1>}
-          <Account parent={parent} serverUrl={family.serverUrl} />
         </div>
-        <button type='button' class='link' onClick={askToLeave}>Выйти</button>
+        <ParentCode />
+        <a class={`bell ${screen === 'requests' ? 'open' : ''}`} href={screen === 'requests' ? '#/' : '#/requests'}
+          aria-label={waiting > 0 ? `Просьбы: ${waiting} ждёт ответа` : 'Просьбы'}>
+          <svg viewBox='0 0 24 24' aria-hidden='true'><path d='M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0' /></svg>
+          {waiting > 0 ? <span class='count'>{waiting}</span> : null}
+        </a>
+        <details class='account-menu'>
+          <summary aria-label='Аккаунт'>⋯</summary>
+          <div class='card'>
+            <Account parent={parent} serverUrl={family.serverUrl} />
+            <button type='button' class='link' onClick={askToLeave}>Выйти</button>
+          </div>
+        </details>
       </header>
       {stale !== null
         ? <div class='banner'>Данные от {clockOf(stale)}: сервер синхронизации не отвечает, показано последнее известное.</div>
@@ -192,6 +205,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
               {screen === 'limits' ? <Limits /> : null}
               {screen === 'history' ? <History /> : null}
               {screen === 'sites' ? <Sites /> : null}
+              {screen === 'requests' ? <Requests /> : null}
               {screen === 'category' ? <CategoryDetails /> : null}
               {screen === 'device' ? <AddDevice serverUrl={family.serverUrl} /> : null}
             </>
@@ -204,6 +218,35 @@ function Console ({ family, familyStale, revision, reload, leave }: {
         ))}
       </nav>
     </App.Provider>
+  )
+}
+
+/** Six digits and a ring that runs out with them; a new code is asked for exactly when this one ends. */
+// @tag:parent-code
+function ParentCode () {
+  const [revision, setRevision] = useState(0)
+  const [now, setNow] = useState(Date.now())
+  const code = useView<CodeView>('code', undefined, revision)
+  const validUntil = code.data?.validUntil ?? null
+  useEffect(() => {
+    const tick = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(tick)
+  }, [])
+  useEffect(() => {
+    if (validUntil === null) return
+    const timer = setTimeout(() => setRevision((value) => value + 1), Math.max(validUntil - Date.now(), 0) + 200)
+    return () => clearTimeout(timer)
+  }, [validUntil])
+  if (!code.data) return null
+  const left = Math.max(0, Math.min(30, Math.round((code.data.validUntil - now) / 1000)))
+  return (
+    <div class='code' title='Код родителя: введите его на детском планшете в «Родитель рядом»'>
+      <svg class='ring' viewBox='0 0 24 24' aria-hidden='true'>
+        <circle class='track' cx='12' cy='12' r='9.5' />
+        <circle class='arc' cx='12' cy='12' r='9.5' pathLength='30' stroke-dasharray={`${left} 30`} transform='rotate(-90 12 12)' />
+      </svg>
+      <div><small>код родителя</small><span class='digits'>{code.data.code.slice(0, 3)} {code.data.code.slice(3)}</span></div>
+    </div>
   )
 }
 

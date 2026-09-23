@@ -62,13 +62,45 @@ export interface Ban extends BanSpec {
 
 export interface NamedCategory { id: string, title: string }
 
+export interface AppAllowance { packageName: string, title: string, until: number }
+
 export interface NowView {
   child: Person
   categories: CategoryNow[]
   bans: Ban[]
   unassignedApps: unknown[] | null
   devices: Device[]
+  allowances: AppAllowance[]
+  activeSchedule: ScheduleKind | null
+  sleep: { start: number, end: number } | null
+  dayEndsAt: number
 }
+
+// @tag:child-request
+export interface RequestItem {
+  id: string
+  packageName: string
+  title: string
+  device: string
+  word: string
+  createdAt: number
+  expiresAt: number
+  status: 'waiting' | 'expired' | 'allowed' | 'denied'
+  category: { id: string, title: string, usedTodayMs: number, limitNowMs: number | null } | null
+  reason: string | null
+  answer: { kind: 'app' | 'category' | 'deny', until: number, word: string, parentName: string, at: number, repeatAfter: number } | null
+}
+
+export interface RequestsView {
+  child: Person
+  dayEndsAt: number
+  waiting: RequestItem[]
+  earlier: RequestItem[]
+  supported: boolean
+}
+
+// @tag:parent-code
+export type CodeView = { code: string, validUntil: number } | null
 
 export interface BansView {
   bans: Ban[]
@@ -109,6 +141,7 @@ export interface FamilyView {
   serverUrl: string
   apiLevel: number
   message?: string
+  waitingRequests: Record<string, number>
 }
 
 export interface AddDeviceToken { token: string, deviceId: string }
