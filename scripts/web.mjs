@@ -67,6 +67,9 @@ function mockApi (fullStatus, path, body) {
   fixture.users.data.find((u) => u.type === 'child').requests = [{
     id: 'rq0001', packageName: 'com.roblox.client', categoryId: 'games1', deviceId: 'devC01',
     word: 'можно ещё полчасика, мы с Петей строим', createdAt: asked, expiresAt: asked + 30 * 60000
+  }, {
+    id: 'rq0002', packageName: 'com.robtopx.geometryjump', categoryId: '', deviceId: 'devC01',
+    word: '', createdAt: asked + 60000, expiresAt: asked + 31 * 60000
   }]
   if (mockFamilyWithoutChild) hideChildren(fixture)
   switch (path) {

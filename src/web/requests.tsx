@@ -80,14 +80,14 @@ function RequestCard ({ request }: { request: RequestItem }) {
           : null}
         {request.reason ? <><dt>Почему закрыто</dt><dd>{request.reason}</dd></> : null}
       </dl>
-      {category
-        ? (
-          <div class='segmented scope' role='tablist'>
-            <button type='button' role='tab' aria-selected={scope === 'app'} onClick={() => setScope('app')}>{request.title}</button>
-            <button type='button' role='tab' aria-selected={scope === 'category'} onClick={() => setScope('category')}>Все «{category.title}»</button>
-          </div>
-          )
-        : null}
+      <div class='segmented scope' role='tablist'>
+        <button type='button' role='tab' aria-selected={scope === 'app'} onClick={() => setScope('app')}>{request.title}</button>
+        <button type='button' role='tab' aria-selected={scope === 'category'} disabled={category === null}
+          onClick={() => setScope('category')}>{category ? `Все «${category.title}»` : 'Вся категория'}</button>
+      </div>
+      {category === null
+        ? <div class='muted small'>Всю категорию разрешить нельзя: приложение ни в одной категории, а категории для приложений без категории у {child.name} нет.</div>
+        : request.categoryIsFallback ? <div class='muted small'>Приложение без категории — «{category.title}» принимает такие приложения.</div> : null}
       <div class='muted small'>Разрешить {target} на</div>
       <div class='durations'>
         {DURATIONS.map((minutes) => (

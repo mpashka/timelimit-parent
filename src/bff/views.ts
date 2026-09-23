@@ -3,7 +3,7 @@ import { dailyLimitRules } from '../core/operations.ts'
 import { childOverview, findChild, usageHistory } from '../core/overview.ts'
 import { parentCode } from '../core/parent-code.ts'
 import { NEW_UI_API_LEVEL, PARENT_SESSION_API_LEVEL, URL_FILTER_API_LEVEL } from '../core/protocol.ts'
-import { requestStatus } from '../core/requests.ts'
+import { answerCategoryId, requestStatus } from '../core/requests.ts'
 import { defaultScheduleCategories } from '../core/schedules.ts'
 import { childCategories, children, type FamilyState, parents } from '../core/state.ts'
 import { scheduleKind, sleepWindow } from '../shared/schedules.ts'
@@ -83,8 +83,9 @@ const viewRequests = (context: ViewContext) => {
   const deviceNames = new Map(context.state.devices.data.map((device) => [device.deviceId, device.name]))
   const activeSchedule = overview.bans.find((ban) => ban.activeNow)
   const describe = (request: NonNullable<typeof overview.child.requests>[number]) => {
-    const category = overview.categories.find((item) => item.id === request.categoryId) ?? null
-    const reason = category === null
+    const categoryId = answerCategoryId(context.state, request, childId)
+    const category = overview.categories.find((item) => item.id === categoryId) ?? null
+    const reason = request.categoryId === '' || category === null
       ? 'новое приложение — ещё нет категории'
       : category.blockedNow === 'limit-reached' ? `лимит «${category.title}» на сегодня кончился`
         : category.blockedNow === 'temporarily-blocked' ? `родитель закрыл «${category.title}»`
@@ -101,6 +102,7 @@ const viewRequests = (context: ViewContext) => {
       expiresAt: request.expiresAt,
       status: requestStatus(request, context.now),
       category: category === null ? null : { id: category.id, title: category.title, usedTodayMs: category.usedTodayMs, limitNowMs: category.limitNowMs },
+      categoryIsFallback: request.categoryId === '' && category !== null,
       reason,
       answer: request.answer === undefined ? null : { ...request.answer, parentName: names.get(request.answer.parentUserId) ?? 'родитель' }
     }

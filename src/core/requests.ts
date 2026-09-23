@@ -22,12 +22,19 @@ export function findRequest (state: FamilyState, requestId: string): { request: 
 export function answerRequest ({ state, requestId, answer, until, word }: {
   state: FamilyState, requestId: string, answer: ChildRequestAnswerKind, until: number, word: string
 }): ParentAction[] {
-  const { request } = findRequest(state, requestId)
+  const { request, childId } = findRequest(state, requestId)
   if (request.answer) throw new ParentConsoleError('the request is already answered', 'another parent or channel was faster — reload the screen')
-  if (answer === 'category' && request.categoryId === '') {
-    throw new ParentConsoleError('the app has no category', 'allow the app itself')
+  if (answer === 'category' && answerCategoryId(state, request, childId) === null) {
+    throw new ParentConsoleError('the app has no category and the child has no category for apps without one', 'allow the app itself')
   }
   return [{ type: 'ANSWER_CHILD_REQUEST', requestId, answer, until: answer === 'deny' ? 0 : until, word }]
+}
+
+/** What «вся категория» opens: the app's category, or for an app without one, where such apps go. */
+export function answerCategoryId (state: FamilyState, request: ChildRequest, childId: string): string | null {
+  if (request.categoryId !== '') return request.categoryId
+  const fallback = state.users.data.find((user) => user.id === childId)?.categoryForNotAssignedApps ?? ''
+  return fallback === '' ? null : fallback
 }
 
 export const setAppAllowance = ({ childId, packageName, until }: { childId: string, packageName: string, until: number }): ParentAction[] =>

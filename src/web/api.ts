@@ -87,6 +87,7 @@ export interface RequestItem {
   expiresAt: number
   status: 'waiting' | 'expired' | 'allowed' | 'denied'
   category: { id: string, title: string, usedTodayMs: number, limitNowMs: number | null } | null
+  categoryIsFallback: boolean
   reason: string | null
   answer: { kind: 'app' | 'category' | 'deny', until: number, word: string, parentName: string, at: number, repeatAfter: number } | null
 }
