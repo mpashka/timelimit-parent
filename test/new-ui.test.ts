@@ -5,7 +5,7 @@ import { parentCode } from '../src/core/parent-code.ts'
 import { answerCategoryId, answerRequest } from '../src/core/requests.ts'
 import { appCard, guessCategory, usageDays } from '../src/core/apps.ts'
 import { fixtureState, moscow } from './helpers.ts'
-import { sleepWindow } from '../src/shared/schedules.ts'
+import { scheduleWindow, sleepWindow } from '../src/shared/schedules.ts'
 import { timestampAt } from '../src/shared/time.ts'
 
 test('parent code is RFC 6238 TOTP: the SHA-1 test vector at T=59 gives 287082', () => {
@@ -48,4 +48,12 @@ test('app card: the week sums both tablets per day, a store section guesses the 
   assert.equal(card.category?.id, 'games1')
   assert.equal(guessCategory(state, 'child1', 'game'), 'games1')
   assert.equal(guessCategory(state, 'child1', 'maps'), null)
+})
+
+test('study window on a Saturday evening is Monday morning', () => {
+  const tz = 'Europe/Moscow'
+  const saturday = 20710 + 5
+  const at = (day: number, minute: number) => timestampAt({ dayOfEpoch: day, minuteOfDay: minute }, tz)
+  const study = [{ days: 0b0011111, start: 8 * 60, end: 14 * 60 - 1 }]
+  assert.deepEqual(scheduleWindow('study', study, at(saturday, 20 * 60), tz), { start: at(saturday + 2, 8 * 60), end: at(saturday + 2, 14 * 60) })
 })

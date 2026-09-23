@@ -31,11 +31,15 @@ export const SCHEDULE_SHAPE_HINT: Record<ScheduleKind, string> = {
  * ends (ui-contract, «Решения 2026-09-23»), its end is «до утра». With several sleep bans — one per
  * category with its own morning — the earliest start wins.
  */
-export function sleepWindow (bans: Array<{ days: number, start: number, end: number }>, now: number, timeZone: string): { start: number, end: number } | null {
+export const sleepWindow = (bans: Array<{ days: number, start: number, end: number }>, now: number, timeZone: string): { start: number, end: number } | null =>
+  scheduleWindow('sleep', bans, now, timeZone)
+
+/** The occurrence of a schedule that is on now or starts next — «Сон начнётся сегодня в 21:00». */
+export function scheduleWindow (kind: ScheduleKind, bans: Array<{ days: number, start: number, end: number }>, now: number, timeZone: string): { start: number, end: number } | null {
   const local = localTime(now, timeZone)
   let best: { start: number, end: number } | null = null
   for (const ban of bans) {
-    if (scheduleKind(ban) !== 'sleep') continue
+    if (scheduleKind(ban) !== kind) continue
     for (const offset of [-1, 0, 1, 2]) {
       const weekday = (local.dayOfWeek + offset + 7) % 7
       if ((ban.days & (1 << weekday)) === 0) continue

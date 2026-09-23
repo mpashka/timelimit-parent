@@ -207,3 +207,30 @@ ul.plain.card { padding: 6px 12px; }
   .tabs a[aria-current="page"] { background: var(--chip); }
   .panel { inset: 0 0 0 auto; width: min(28rem, 100vw); box-shadow: -8px 0 32px rgba(0, 0, 0, .2); }
 }
+
+/* @tag:category-limits @tag:ban-schedule — лимит на строке категории, «Режимы» и шкала недели */
+.limit-line { margin-top: 8px; }
+.limit-line .chips button { min-height: 36px; padding: 4px 10px; }
+.big-time { font-size: 1.3rem; font-weight: 700; margin: 6px 0; font-variant-numeric: tabular-nums; }
+.days button.day { min-width: 40px; min-height: 36px; padding: 4px 6px; }
+.schedule h2 .muted { font-weight: 400; margin-left: 6px; }
+details.others { margin: 12px 0; }
+details.others > summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; gap: 8px; list-style: none; color: var(--accent); }
+details.others > summary::-webkit-details-marker { display: none; }
+details.others > summary::before { content: '▸'; }
+details.others[open] > summary::before { content: '▾'; }
+.warn-card { border-color: var(--warn); }
+.warn-card ul { margin: 6px 0 0; padding-left: 18px; }
+.week-scale { display: none; }
+.swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: middle; margin: 0 4px 0 10px; }
+.swatch.sleep, .scale-track i.sleep { background: var(--closed); }
+.swatch.study, .scale-track i.study { background: var(--accent); }
+.scale-hours { position: relative; height: 18px; margin: 8px 0 2px 32px; font-size: .75rem; color: var(--muted); }
+.scale-hours span { position: absolute; transform: translateX(-50%); }
+.scale-row { display: grid; grid-template-columns: 32px 1fr; align-items: center; margin: 3px 0; }
+.scale-track { position: relative; height: 16px; background: var(--chip); border-radius: 4px; }
+.scale-track i { position: absolute; top: 0; bottom: 0; opacity: .85; }
+.scale-track .now { position: absolute; top: -5px; bottom: -5px; width: 3px; margin-left: -1px; background: var(--deny); border-radius: 2px; z-index: 1; }
+@media (min-width: 900px) {
+  .week-scale { display: block; }
+}

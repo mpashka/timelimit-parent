@@ -1,8 +1,8 @@
 import { addBanActions, type BanSpec, removeBanActions, replaceBanActions } from '../core/bans.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import {
-  addChild, allowCategoryUntil, allowChildUntil, blockCategory, grantExtraTime, limitApp, lockChild,
-  moveApp, revokeExtraTime, setDailyLimit, setUrlFilter, undoLimitApp, unlockChild
+  addChild, allowCategoryUntil, allowChildUntil, blockCategory, grantExtraTime, lockChild,
+  moveApp, revokeExtraTime, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild } from '../core/overview.ts'
 import { answerRequest, setAppAllowance } from '../core/requests.ts'
@@ -165,23 +165,6 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
     const childId = child(context, body).id
     const minutes = body.minutes === null ? null : num(body, 'minutes')
     return setDailyLimit({ category: category(context, body, childId), minutes, days: optionalNum(body, 'days') ?? ALL_DAYS })
-  },
-
-  'limit-app': (context, body) => {
-    const childId = child(context, body).id
-    const packageName = str(body, 'package')
-    if (body.undo === true) {
-      const previous = optionalStr(body, 'category')
-      return undoLimitApp({ state: context.state, childId, packageName, previousCategoryId: previous ? category(context, body, childId).id : null })
-    }
-    return limitApp({
-      state: context.state,
-      childId,
-      packageName,
-      minutes: num(body, 'minutes'),
-      title: optionalStr(body, 'title') ?? packageName,
-      days: optionalNum(body, 'days') ?? ALL_DAYS
-    })
   },
 
   'app-move': (context, body) => {

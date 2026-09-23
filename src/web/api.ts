@@ -51,6 +51,7 @@ export interface CategoryNow {
   blockedNow: 'temporarily-blocked' | 'ban' | 'legacy-blocked-time' | 'limit-reached' | null
   blockedByParent: string | null
   countsTimeNow: boolean
+  dailyLimits: Rule[]
 }
 
 export interface Ban extends BanSpec {
@@ -109,6 +110,7 @@ export interface NowView {
   allowances: AppAllowance[]
   apps: AppTime[] | null
   newApps: NewApp[]
+  loopholes: Loophole[]
   appUsageProblem: string | null
   activeSchedule: ScheduleKind | null
   sleep: { start: number, end: number } | null
@@ -149,16 +151,6 @@ export interface BansView {
   scheduleDefaults: Record<ScheduleKind, string[]>
 }
 
-export interface LimitsView {
-  categories: Array<NamedCategory & { parentId: string | null, apps: string[], dailyLimits: Rule[] }>
-}
-
-export interface HistoryView {
-  categories: NamedCategory[]
-  days: Array<{ dayOfEpoch: number, byCategory: Record<string, number> }>
-  loopholes: Loophole[]
-}
-
 export interface UrlFilter { enabled: boolean, allow: string[], block: string[] }
 
 export interface SitesView {
@@ -169,7 +161,8 @@ export interface SitesView {
 export interface CategoryView {
   title: string
   rules: Rule[]
-  apps: string[]
+  apps: Array<{ packageName: string, title: string }>
+  week: Array<{ day: number, ms: number }>
 }
 
 export interface FamilyView {

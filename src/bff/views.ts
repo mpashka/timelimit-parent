@@ -88,8 +88,13 @@ const viewNow = (context: ViewContext) => {
   const allowances = (overview.child.appAllowances ?? [])
     .filter((item) => item.until > context.now)
     .map((item) => ({ ...item, title: appTitle(context.state, item.packageName) }))
+  const categoryViews = childCategories(context.state, childId)
   return {
     ...overview,
+    categories: overview.categories.map((category) => {
+      const own = categoryViews.find((item) => item.id === category.id)
+      return { ...category, dailyLimits: own ? dailyLimitRules(own) : [] }
+    }),
     ...dayEndsAt(context, overview.bans, overview.child.timeZone),
     allowances,
     activeSchedule: overview.bans.filter((ban) => ban.activeNow).map((ban) => scheduleKind(ban)).find((kind) => kind !== null) ?? null,
@@ -214,31 +219,6 @@ const viewBans = (context: ViewContext) => {
   }
 }
 
-const viewLimits = (context: ViewContext) => {
-  const childId = requireChild(context)
-  const overview = childOverview(context.state, childId, context.now)
-  return {
-    child: overview.child,
-    categories: childCategories(context.state, childId).map((category) => ({
-      id: category.id,
-      title: category.base?.title ?? category.id,
-      parentId: category.base?.parentCategoryId || null,
-      apps: category.apps,
-      dailyLimits: dailyLimitRules(category)
-    })),
-    unassignedApps: overview.unassignedApps,
-    categoryForUnassignedApps: overview.categoryForUnassignedApps
-  }
-}
-
-const viewHistory = (context: ViewContext) => {
-  const childId = requireChild(context)
-  return {
-    ...usageHistory(context.state, childId, context.now, HISTORY_DAYS),
-    loopholes: childOverview(context.state, childId, context.now).loopholes
-  }
-}
-
 const viewSites = (context: ViewContext) => {
   const childId = requireChild(context)
   const child = context.state.users.data.find((user) => user.id === childId)
@@ -267,8 +247,6 @@ const viewFamily = (context: ViewContext) => ({
 const views: Record<string, (context: ViewContext) => unknown> = {
   now: viewNow,
   bans: viewBans,
-  limits: viewLimits,
-  history: viewHistory,
   sites: viewSites,
   requests: viewRequests,
   apps: viewApps,
@@ -287,14 +265,18 @@ export function buildView (name: string, context: ViewContext): unknown {
   return build(context)
 }
 
+/** «подробнее» on a category row: its rules read-only, its apps and its week — what «Лимиты» and «История» used to show. */
 function viewCategory (categoryId: string, context: ViewContext) {
   const category = context.state.categories[categoryId]
   if (!category) throw new ParentConsoleError(`no category with id ${categoryId}`)
+  const childId = category.base?.childId
+  const history = childId ? usageHistory(context.state, childId, context.now, HISTORY_DAYS) : null
   return {
     id: category.id,
     title: category.base?.title ?? category.id,
     parentId: category.base?.parentCategoryId || null,
     rules: category.rules,
-    apps: category.apps
+    apps: category.apps.map((packageName) => ({ packageName, title: appTitle(context.state, packageName) })),
+    week: history === null ? [] : history.days.map((day) => ({ day: day.dayOfEpoch, ms: day.byCategory[category.id] ?? 0 }))
   }
 }

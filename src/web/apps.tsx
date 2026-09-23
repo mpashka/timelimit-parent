@@ -76,7 +76,6 @@ export function Apps () {
       {view.other.length > 0
         ? <section class='card'><h2>Вне категорий</h2>{view.other.map((app) => <WeekRow key={app.packageName} app={app} />)}</section>
         : null}
-      <p class='muted small'><a href='#/limits'>Лимиты категорий</a> · <a href='#/history'>История по дням</a></p>
     </>
   )
 }

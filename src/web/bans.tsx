@@ -1,8 +1,8 @@
 import { useState } from 'preact/hooks'
-import { SCHEDULE_SHAPE_HINT, type ScheduleKind, scheduleKind } from '../shared/schedules.ts'
-import { formatClock, parseClock } from '../shared/time.ts'
+import { SCHEDULE_SHAPE_HINT, type ScheduleKind, scheduleKind, scheduleWindow } from '../shared/schedules.ts'
+import { formatClock, localTime, parseClock } from '../shared/time.ts'
 import type { Ban, BansView } from './api.ts'
-import { ALL_DAYS, type BanSpec, banKey, banLabel, clockAfter, DAY_NAMES, MINUTE_MAX } from './format.ts'
+import { ALL_DAYS, type BanSpec, banKey, banLabel, clockAfter, DAY_NAMES, formatUntil, MINUTE_MAX } from './format.ts'
 import { ActionButton, SubmitButton, useApp, useBusy, useScreen, type Work } from './ui.tsx'
 
 // @tag:parent-console
@@ -35,8 +35,10 @@ export function Bans () {
       {(['sleep', 'study'] as const).map((kind) => (
         <Schedule key={kind} kind={kind} editing={editing === kind} onEdit={() => setEditing(kind)} onClose={() => setEditing(null)} />
       ))}
-      <h3>Другие запреты</h3>
-      <p class='muted small'>Запрет «с–до» по дням на выбранные категории. <b>Жёсткий</b> — доп. время не помогает, <b>мягкий</b> — «+N минут» его обходит. Накинуть время во время запрета — «+N» на экране «Сейчас».</p>
+      <WeekScale />
+      <details class='others' open={editing !== null && editing !== 'sleep' && editing !== 'study'}>
+        <summary>Другие правила{others ? ` · ${view.bans.filter((ban) => !ban.kind).length}` : ''}</summary>
+      <p class='muted small'>Запрет «с–до» по дням на выбранные категории. <b>Жёсткий</b> — доп. время не помогает, <b>мягкий</b> — «+N минут» его обходит. Накинуть время во время запрета — «+N» на экране «Сегодня».</p>
       {editing === 'new'
         ? <BanForm categories={view.categories} onClose={() => setEditing(null)} />
         : <button type='button' class='wide' onClick={() => setEditing('new')}>Добавить запрет</button>}
@@ -48,6 +50,7 @@ export function Bans () {
           ? <BanForm key={key} categories={view.categories} ban={ban} index={index} onClose={() => setEditing(null)} />
           : <BanCard key={key} ban={ban} index={index} categories={view.categories} onEdit={() => setEditing(key)} />
       })}
+      </details>
       {view.legacyBans.length > 0
         ? (
           <section class='card'>
@@ -69,7 +72,8 @@ type Wanted = BanSpec & { categories: string[] }
  */
 function Schedule ({ kind, editing, onEdit, onClose }: { kind: ScheduleKind, editing: boolean, onEdit: () => void, onClose: () => void }) {
   const view = useScreen<BansView>()
-  const { pending, run } = useApp()
+  const { pending, run, now, child } = useApp()
+  const tz = child.timeZone
   const { title, spec } = SCHEDULES[kind]
   const names = (ids: string[]) => ids.map((id) => view.categories.find((c) => c.id === id)?.title ?? id).join(', ')
   const bans = view.bans.filter((ban) => ban.kind === kind)
@@ -102,12 +106,22 @@ function Schedule ({ kind, editing, onEdit, onClose }: { kind: ScheduleKind, edi
     )
   }
 
+  const occurrence = on ? scheduleWindow(kind, bans, now, tz) : null
+  const status = occurrence === null
+    ? (on ? '' : 'выключен')
+    : occurrence.start <= now ? `идёт ${formatUntil(occurrence.end, now, tz)}` : `начнётся ${whenLabel(occurrence.start, now, tz)}`
+  const closed = new Set(allCategories)
+  const open = view.categories.filter((category) => !closed.has(category.id))
+  const toggleDay = (day: number): Work => {
+    const days = main!.days ^ (1 << day)
+    return set([{ ...specOf(main!), days, categories: allCategories }], `${title}: ${banLabel({ ...specOf(main!), days })}`)
+  }
+
   return (
-    <article class='card'>
+    <article class={`card schedule ${kind}`}>
       <div class='row'>
-        <h2>{title}</h2>
+        <h2>{title} <span class='muted small'>{status}</span></h2>
         <span class='chips'>
-          {bans.some((ban) => ban.activeNow) ? <span class='chip warn'>действует</span> : null}
           <label class={`switch ${pending?.key === key ? 'pressed' : ''}`}>
             <input type='checkbox' role='switch' checked={on} disabled={pending?.key === key} onChange={(event) => {
               event.currentTarget.checked = on
@@ -120,15 +134,70 @@ function Schedule ({ kind, editing, onEdit, onClose }: { kind: ScheduleKind, edi
       {main
         ? (
           <>
-            <div>{banLabel(main)}{main.hard ? '' : ', мягкий'} — {names(main.categoryIds)}</div>
+            <div class='big-time'>с {formatClock(main.start)} до {clockAfter(main.end)}{main.hard ? '' : <span class='muted small'> · мягкий</span>}</div>
+            <div class='chips days'>
+              {DAY_NAMES.map((name, day) => (
+                <ActionButton key={name} class={(main.days & (1 << day)) !== 0 ? 'primary day' : 'day'}
+                  disabled={main.days === (1 << day)} work={() => toggleDay(day)}>{name}</ActionButton>
+              ))}
+            </div>
+            <div class='small'>Открыто: {open.length === 0 ? 'ничего' : open.map((category) => category.title).join(', ')} · <button type='button' class='link small' onClick={onEdit}>изменить</button></div>
             {exceptions.map((ban) => (
               <div key={banKey(ban)} class='muted small'>{names(ban.categoryIds)}: {banLabel(ban)}{ban.hard ? '' : ', мягкий'}</div>
             ))}
           </>
           )
-        : <div class='muted small'>Включить — {banLabel(spec)}: {names(view.scheduleDefaults[kind]) || 'категорий нет'}</div>}
-      <button type='button' class='link' onClick={onEdit}>Изменить</button>
+        : <div class='muted small'>Включить — {banLabel(spec)}, закроет: {names(view.scheduleDefaults[kind]) || 'категорий нет'} · <button type='button' class='link small' onClick={onEdit}>изменить</button></div>}
     </article>
+  )
+}
+
+/** «сегодня в 21:00», «завтра в 08:00», «в пт в 08:00». */
+function whenLabel (timestamp: number, now: number, timeZone: string): string {
+  const target = localTime(timestamp, timeZone)
+  const today = localTime(now, timeZone).dayOfEpoch
+  const clock = formatClock(target.minuteOfDay)
+  if (target.dayOfEpoch === today) return `сегодня в ${clock}`
+  if (target.dayOfEpoch === today + 1) return `завтра в ${clock}`
+  return `в ${DAY_NAMES[target.dayOfWeek]} в ${clock}`
+}
+
+/** The week at a glance, only in a browser and only to look at: everything is changed on the cards above. */
+function WeekScale () {
+  const view = useScreen<BansView>()
+  const { now, child } = useApp()
+  const local = localTime(now, child.timeZone)
+  const segments: Array<{ day: number, from: number, to: number, kind: ScheduleKind }> = []
+  for (const ban of view.bans) {
+    if (!ban.kind) continue
+    for (let day = 0; day < 7; day++) {
+      if ((ban.days & (1 << day)) === 0) continue
+      if (ban.start <= ban.end) {
+        segments.push({ day, from: ban.start, to: ban.end + 1, kind: ban.kind })
+      } else {
+        segments.push({ day, from: ban.start, to: 1440, kind: ban.kind })
+        segments.push({ day: (day + 1) % 7, from: 0, to: ban.end + 1, kind: ban.kind })
+      }
+    }
+  }
+  const percent = (minute: number) => `${minute / 1440 * 100}%`
+  return (
+    <section class='card week-scale' aria-hidden='true'>
+      <div class='row'><h2>Неделя {child.name}</h2><span class='muted small'><i class='swatch sleep' /> Сон <i class='swatch study' /> Учёба</span></div>
+      <div class='scale-hours'>{[0, 3, 6, 9, 12, 15, 18, 21, 24].map((hour) => <span key={hour} style={{ left: percent(hour * 60) }}>{String(hour).padStart(2, '0')}</span>)}</div>
+      {DAY_NAMES.map((name, day) => (
+        <div class='scale-row' key={name}>
+          <span class='muted small'>{name}</span>
+          <div class='scale-track'>
+            {segments.filter((item) => item.day === day).map((item, index) => (
+              <i key={index} class={item.kind} style={{ left: percent(item.from), width: percent(item.to - item.from) }} />
+            ))}
+            {day === local.dayOfWeek ? <b class='now' style={{ left: percent(local.minuteOfDay) }} /> : null}
+          </div>
+        </div>
+      ))}
+      <p class='muted small'>Шкала только показывает; меняется всё на карточках выше.</p>
+    </section>
   )
 }
 

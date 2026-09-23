@@ -3,12 +3,11 @@ import { useEffect, useRef, useState } from 'preact/hooks'
 import { type CodeView, type FamilyView, type RequestsView, intent, listenChanged, loadWebConfig, signOut, type WebConfig } from './api.ts'
 import { Bans } from './bans.tsx'
 import { clockOf, errorText } from './format.ts'
-import { History } from './history.tsx'
 import { AppCard, Apps } from './apps.tsx'
 import { Devices } from './devices.tsx'
 import { Requests } from './requests.tsx'
 import { Home } from './home.tsx'
-import { CategoryDetails, Limits } from './limits.tsx'
+import { CategoryDetails } from './category.tsx'
 import { AddChildForm, AddDevice } from './setup.tsx'
 import { SignIn } from './signin.tsx'
 import { Sites } from './sites.tsx'
@@ -22,14 +21,14 @@ const SAFETY_RELOAD_MS = 5 * 60 * 1000
 const CLOCK_MS = 30000
 
 const tabs = [
-  { path: '', title: 'Сегодня', also: [] as string[] },
-  { path: 'apps', title: 'Приложения', also: ['app', 'limits', 'history', 'category'] },
+  { path: '', title: 'Сегодня', also: ['category'] },
+  { path: 'apps', title: 'Приложения', also: ['app'] },
   { path: 'bans', title: 'Режимы', also: [] },
   { path: 'sites', title: 'Сайты', also: [] },
   { path: 'tablets', title: 'Планшеты', also: ['device'] }
 ]
 
-const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', limits: 'limits', history: 'history', sites: 'sites', apps: 'apps', tablets: 'devices', device: null }
+const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', sites: 'sites', apps: 'apps', tablets: 'devices', device: null }
 
 const currentRoute = () => location.hash.replace(/^#\/?/, '')
 
@@ -90,18 +89,32 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   const [now, setNow] = useState(Date.now())
   const [pending, setPending] = useState<AppContext['pending']>(null)
   const [toast, setToast] = useState<ToastMessage | null>(null)
-  const [bellOpen, setBellOpen] = useState(route === 'requests')
+  // The panel is an entry of the browser history, so the phone's «back» closes it instead of leaving the page.
+  const [bellOpen, setBellOpen] = useState(() => history.state?.panel === 'requests')
   const [panelRevision, setPanelRevision] = useState(0)
+  const openBell = () => {
+    history.pushState({ panel: 'requests' }, '', location.href)
+    setBellOpen(true)
+  }
+  const closeBell = () => {
+    if (history.state?.panel === 'requests') history.back()
+    else setBellOpen(false)
+  }
+  useEffect(() => {
+    const onPop = () => setBellOpen(history.state?.panel === 'requests')
+    addEventListener('popstate', onPop)
+    return () => removeEventListener('popstate', onPop)
+  }, [])
   useEffect(() => {
     if (route !== 'requests') return
-    setBellOpen(true)
     history.replaceState(null, '', '#/')
     dispatchEvent(new HashChangeEvent('hashchange'))
+    openBell()
   }, [route])
   const toastId = useRef(0)
 
   const [requested, argument] = route.split('/')
-  const screen = ['bans', 'limits', 'history', 'sites', 'category', 'device', 'apps', 'app', 'tablets'].includes(requested) ? requested : ''
+  const screen = ['bans', 'sites', 'category', 'device', 'apps', 'app', 'tablets'].includes(requested) ? requested : ''
   const kids = family.children
   const child = kids.find((kid) => kid.id === childId) ?? kids[0]
   const viewName = child === undefined ? null : screen === 'category' ? `category/${argument ?? ''}` : screen === 'app' ? `app/${argument ?? ''}` : screenViews[screen] ?? null
@@ -186,7 +199,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
             : <h1>{child.name}</h1>}
         </div>
         <ParentCode />
-        <button type='button' class={`bell ${bellOpen ? 'open' : ''}`} aria-expanded={bellOpen} onClick={() => setBellOpen(!bellOpen)}
+        <button type='button' class={`bell ${bellOpen ? 'open' : ''}`} aria-expanded={bellOpen} onClick={() => (bellOpen ? closeBell() : openBell())}
           aria-label={waiting > 0 ? `Просьбы: ${waiting} ждёт ответа` : 'Просьбы'}>
           <svg viewBox='0 0 24 24' aria-hidden='true'><path d='M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0' /></svg>
           {waiting > 0 ? <span class='count'>{waiting}</span> : null}
@@ -213,8 +226,6 @@ function Console ({ family, familyStale, revision, reload, leave }: {
             <>
               {screen === '' ? <Home /> : null}
               {screen === 'bans' ? <Bans /> : null}
-              {screen === 'limits' ? <Limits /> : null}
-              {screen === 'history' ? <History /> : null}
               {screen === 'sites' ? <Sites /> : null}
               {screen === 'apps' ? <Apps /> : null}
               {screen === 'app' ? <AppCard /> : null}
@@ -224,11 +235,17 @@ function Console ({ family, familyStale, revision, reload, leave }: {
             </>
             )}
       </main>
-      {bellOpen ? <RequestsPanel childId={child.id} revision={revision + panelRevision} close={() => setBellOpen(false)} /> : null}
+      {bellOpen ? <RequestsPanel childId={child.id} revision={revision + panelRevision} close={closeBell} /> : null}
       <Toast toast={toast} close={() => setToast(null)} />
       <nav class='tabs'>
         {tabs.map((tab) => (
-          <a key={tab.path} href={`#/${tab.path}`} onClick={() => setBellOpen(false)}
+          <a key={tab.path} href={`#/${tab.path}`} onClick={(event) => {
+            if (!bellOpen) return
+            event.preventDefault()
+            history.replaceState(null, '', `#/${tab.path}`)
+            setBellOpen(false)
+            dispatchEvent(new HashChangeEvent('hashchange'))
+          }}
             aria-current={screen === tab.path || tab.also.includes(screen) ? 'page' : undefined}>{tab.title}</a>
         ))}
       </nav>

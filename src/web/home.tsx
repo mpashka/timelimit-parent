@@ -1,5 +1,5 @@
 import type { Ban, CategoryNow, NowView } from './api.ts'
-import { banEndsAt, clockOf, formatDuration, formatUntil } from './format.ts'
+import { banEndsAt, clockOf, dailyLimitOf, formatDuration, formatUntil, loopholeText } from './format.ts'
 import { AppRow, NewAppRow } from './apps.tsx'
 import { DeviceLine } from './devices.tsx'
 import { countAdvancedOpened } from './store.ts'
@@ -38,6 +38,7 @@ export function Home () {
         <section class='list'>
           {view.categories.map((category) => <CategoryRow key={category.id} category={category} />)}
         </section>
+        <Loopholes />
         {view.devices.length > 0 ? <ChildDevices /> : null}
       </div>
     </div>
@@ -229,6 +230,7 @@ function CategoryRow ({ category }: { category: CategoryNow }) {
           ? <span class='chip'>время сейчас не считается</span>
           : null}
       </div>
+      <DailyLimit category={category} />
       {limit !== null || duringBan
         ? (
           <div class='chips grants'>
@@ -247,5 +249,51 @@ function CategoryRow ({ category }: { category: CategoryNow }) {
           )
         : null}
     </article>
+  )
+}
+
+const LIMIT_PRESETS = [30, 60, 90, 120]
+
+/** The category's daily limit, edited on its own row: ready values in one tap, like an app's own limit. */
+// @tag:category-limits
+function DailyLimit ({ category }: { category: CategoryNow }) {
+  const current = dailyLimitOf(category.dailyLimits)
+  const presets = current.minutes !== null && !LIMIT_PRESETS.includes(current.minutes) ? [...LIMIT_PRESETS, current.minutes].sort((a, b) => a - b) : LIMIT_PRESETS
+  // ponytail: undo puts back one limit for all days; a category whose days had different limits
+  // (only the Android app can set that) comes back as the single limit shown here
+  const change = (next: number | null) => () => ({
+    key: `limit-${category.id}-${next}`,
+    intent: 'limit-set',
+    body: { category: category.id, minutes: next },
+    done: next === null ? `«${category.title}»: без дневного лимита` : `«${category.title}»: лимит ${formatDuration(next * MINUTE)} в день`,
+    undo: () => ({ intent: 'limit-set', body: { category: category.id, minutes: current.minutes } })
+  })
+  return (
+    <div class='limit-line'>
+      <span class='muted small'>Лимит в день</span>
+      <div class='chips'>
+        <ActionButton class={current.minutes === null ? 'primary' : ''} disabled={current.minutes === null} work={change(null)}>нет</ActionButton>
+        {presets.map((minutes) => (
+          <ActionButton key={minutes} class={current.minutes === minutes ? 'primary' : ''} disabled={current.minutes === minutes} work={change(minutes)}>
+            {formatDuration(minutes * MINUTE)}
+          </ActionButton>
+        ))}
+      </div>
+      {current.mixed ? <div class='muted small'>В приложении на планшете заданы разные лимиты по дням (показан наименьший); нажатие заменит их одним на все дни.</div> : null}
+    </div>
+  )
+}
+
+/** A loophole shows as a line only while there is one — «История» used to hold it for good. */
+export function Loopholes () {
+  const { child, now } = useApp()
+  const view = useScreen<NowView>()
+  if (view.loopholes.length === 0) return null
+  const titles = new Map(view.categories.map((c) => [c.id, c.title]))
+  return (
+    <section class='card warn-card'>
+      <h2>Где время может уходить незаметно</h2>
+      <ul>{view.loopholes.map((l) => <li key={l.kind + l.categoryId}>{loopholeText(l, titles, now, child.timeZone, view.child.disableLimitsUntil)}</li>)}</ul>
+    </section>
   )
 }
