@@ -15,7 +15,7 @@ import {
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
 import { ALL_DAYS, type ParentAction } from '../core/protocol.ts'
 import { SyncClient } from '../core/session.ts'
-import { childCategories, type FamilyState } from '../core/state.ts'
+import { childCategories, parents, type FamilyState } from '../core/state.ts'
 import { formatClock, formatDays, parseClock, parseDays, parseDurationMinutes, parseUntil } from '../shared/time.ts'
 import {
   configPath, FileStorage, ownDeviceId, readConfig, readDeviceToken, serverUrl, TOKEN_KEY, writeConfig
@@ -29,7 +29,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   login [--mail M] [--device-name N]      sign in with a mail code, print the device token
   device list                             devices of the family and who uses them
   device add                              code of five words for connecting a new device
-  device assign <device> <child|none>     who uses the device; "none" frees it again
+  device assign <device> <user|none>      who uses the device (a child or a parent); "none" frees it again
   device ignore-manipulation <device>     forget the device's past manipulation warnings
   device flags <device> [name=on|off]...  experimental flags of the device; without changes lists them
   device remove <device>                  remove the device from the family; its app loses the connection
@@ -207,8 +207,9 @@ async function main (): Promise<void> {
       }
       if (args[0] === 'assign') {
         const device = findDevice(state, need(args[1], 'device id or name'))
-        const target = need(args[2], 'child name or none')
-        return apply(session, [{ type: 'SET_DEVICE_USER', deviceId: device.deviceId, userId: target === 'none' ? '' : child(target).id }])
+        const target = need(args[2], 'user name or none')
+        const parent = parents(state).find((u) => u.name.toLowerCase() === target.toLowerCase())
+        return apply(session, [{ type: 'SET_DEVICE_USER', deviceId: device.deviceId, userId: target === 'none' ? '' : (parent ?? child(target)).id }])
       }
       if (args[0] === 'ignore-manipulation') {
         const device = findDevice(state, need(args[1], 'device id or name'))
