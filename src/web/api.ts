@@ -23,6 +23,7 @@ export interface Device {
   name: string
   model: string
   currentUserId: string
+  exFlags: number // @tag:device-flags
 }
 
 export interface Rule {

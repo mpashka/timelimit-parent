@@ -256,3 +256,16 @@ test('add-device token lets a child device join the family', async () => {
   })
   assert.equal(reused.status, 401, 'a token works once')
 })
+
+// @tag:device-flags
+test('device flags: each change touches only its own bits', async () => {
+  const tablet = (await session.sync()).devices.data.find((d) => d.name === 'Tablet')!
+  const flag = (mask: number, on: boolean) => session.push([{ type: 'UPDATE_DEVICE_EXPERIMENTAL_FLAGS', deviceId: tablet.deviceId, mask, value: on ? mask : 0 }])
+  const flags = async () => (await session.sync()).devices.data.find((d) => d.deviceId === tablet.deviceId)!.exFlags
+  assert.equal(tablet.exFlags, 0)
+  await flag(0x2, true)
+  await flag(0x400, true)
+  assert.equal(await flags(), 0x402)
+  await flag(0x2, false)
+  assert.equal(await flags(), 0x400)
+})

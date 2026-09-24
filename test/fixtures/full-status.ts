@@ -3,6 +3,7 @@ import type { ServerDataStatus, ServerDevice } from '../../src/core/protocol.ts'
 const device = (own: Pick<ServerDevice, 'deviceId' | 'name' | 'model' | 'currentUserId' | 'cAppVersion' | 'isUserKeptSignedIn'> & Partial<ServerDevice>): ServerDevice => ({
   addedAt: 1757800000000,
   networkTime: 'if possible',
+  exFlags: 0,
   cProtectionLevel: 'device owner',
   hProtectionLevel: 'device owner',
   cUsageStats: 'granted',

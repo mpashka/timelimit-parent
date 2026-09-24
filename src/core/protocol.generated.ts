@@ -401,6 +401,13 @@ export interface SerializedUpdateChildTaskAction {
   extraTimeDuration: number
 }
 
+export interface SerializedUpdateDeviceExperimentalFlagsAction {
+  type: 'UPDATE_DEVICE_EXPERIMENTAL_FLAGS'
+  deviceId: string
+  mask: number
+  value: number
+}
+
 export interface SerializedUpdateDeviceNameAction {
   type: 'UPDATE_DEVICE_NAME'
   deviceId: string
@@ -530,6 +537,7 @@ export interface ServerDeviceData {
   pk?: string
   pType?: string
   pLevel: number
+  exFlags: number
 }
 
 export interface ServerDeviceList {
@@ -819,6 +827,7 @@ export type SerializedParentAction =
   | SerializedAnswerChildRequestAction
   | SerializedSetAppAllowanceAction
   | SerializedSetAppRuleAction
+  | SerializedUpdateDeviceExperimentalFlagsAction
   | SerializedUpdateUserLimitLoginCategory
   | SerializedUpdateUserLimitLoginPreBlockDuration
 

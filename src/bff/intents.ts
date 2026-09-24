@@ -4,11 +4,12 @@ import {
   addChild, allowCategoryUntil, allowChildUntil, blockCategory, grantExtraTime, lockChild,
   moveApp, revokeExtraTime, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
-import { childOverview, findCategory, findChild } from '../core/overview.ts'
+import { childOverview, findCategory, findChild, findDevice } from '../core/overview.ts'
 import { answerRequest, setAppAllowance } from '../core/requests.ts'
 import { ALL_DAYS, type ParentAction, type UrlFilter } from '../core/protocol.ts'
 import { type ScheduleBan, setScheduleActions } from '../core/schedules.ts'
 import { childCategories, type FamilyState } from '../core/state.ts'
+import { findDeviceFlag } from '../shared/device-flags.ts'
 import { SCHEDULE_KINDS, type ScheduleKind } from '../shared/schedules.ts'
 
 // @tag:parent-console
@@ -209,6 +210,14 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
     if (!Number.isInteger(days) || days < 0 || days > ALL_DAYS) throw badRequest('days must be a weekday mask')
     if (!Number.isInteger(limitMinutes) || limitMinutes < -1 || limitMinutes > 1440) throw badRequest('limitMinutes must be -1..1440')
     return [{ type: 'SET_APP_RULE', userId: child(context, body).id, packageName: str(body, 'package'), days, limitMinutes }]
+  },
+
+  // @tag:device-flags
+  'device-flag': (context, body) => {
+    const flag = findDeviceFlag(str(body, 'flag'))
+    if (!flag) throw badRequest('flag must be one of the device flags')
+    const { deviceId } = findDevice(context.state, str(body, 'device'))
+    return [{ type: 'UPDATE_DEVICE_EXPERIMENTAL_FLAGS', deviceId, mask: flag.bit, value: bool(body, 'on') ? flag.bit : 0 }]
   },
 
   'child-add': (context, body) => addChild({ name: str(body, 'name'), timeZone: str(body, 'timeZone') }).actions

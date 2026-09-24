@@ -8,6 +8,7 @@ import { TimelimitApi, TOKEN_LIFETIME_MS } from '../core/api.ts'
 import { addBanActions, readBans, removeBanActions } from '../core/bans.ts'
 import { exportChild, overlayConfigs, planImport, type PortableConfig } from '../core/config.ts'
 import { ParentConsoleError } from '../core/errors.ts'
+import { DEVICE_FLAGS, findDeviceFlag } from '../shared/device-flags.ts'
 import {
   allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
@@ -30,6 +31,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   device add                              code of five words for connecting a new device
   device assign <device> <child|none>     who uses the device; "none" frees it again
   device ignore-manipulation <device>     forget the device's past manipulation warnings
+  device flags <device> [name=on|off]...  experimental flags of the device; without changes lists them
   device remove <device>                  remove the device from the family; its app loses the connection
   status [child]                          time used/left, bans, loopholes
   usage [child] [--days N]                used time per category per day
@@ -223,6 +225,25 @@ async function main (): Promise<void> {
           ignoreHadManipulationFlags: device.hadManipulationFlags
         }])
       }
+      // @tag:device-flags
+      if (args[0] === 'flags') {
+        const device = findDevice(state, need(args[1], 'device id or name'))
+        const changes = args.slice(2).map((arg) => {
+          const [name, value] = arg.split('=')
+          const flag = findDeviceFlag(name)
+          if (!flag || (value !== 'on' && value !== 'off')) {
+            throw new ParentConsoleError(`bad flag change "${arg}"`, `write name=on or name=off; names: ${DEVICE_FLAGS.map((f) => f.name).join(', ')}`)
+          }
+          return { flag, on: value === 'on' }
+        })
+        if (changes.length === 0) {
+          const rows = DEVICE_FLAGS.map((flag) => [(device.exFlags & flag.bit) !== 0 ? 'on' : 'off', flag.name, flag.title])
+          return print(`${device.name} (${device.deviceId})\n${table(['state', 'flag', 'what'], rows)}`, { deviceId: device.deviceId, exFlags: device.exFlags })
+        }
+        const mask = changes.reduce((bits, { flag }) => bits | flag.bit, 0)
+        const value = changes.reduce((bits, { flag, on }) => on ? bits | flag.bit : bits, 0)
+        return apply(session, [{ type: 'UPDATE_DEVICE_EXPERIMENTAL_FLAGS', deviceId: device.deviceId, mask, value }])
+      }
       if (args[0] === 'remove') {
         const device = findDevice(state, need(args[1], 'device id or name'))
         if (device.deviceId === ownDeviceId(config)) {
@@ -233,7 +254,7 @@ async function main (): Promise<void> {
         await session.removeDevice(device.deviceId)
         return print(`removed device ${label}`, { removed: device })
       }
-      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign | device ignore-manipulation | device remove')
+      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign | device ignore-manipulation | device flags | device remove')
     }
     case 'usage': {
       const owner = child(args[0])

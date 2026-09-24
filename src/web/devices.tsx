@@ -1,6 +1,8 @@
+import { Fragment } from 'preact'
 import type { DevicesView, DeviceWithStatus } from './api.ts'
 import { clockOf, formatDuration } from './format.ts'
-import { useApp, useScreen } from './ui.tsx'
+import { DEVICE_FLAGS, type DeviceFlag } from '../shared/device-flags.ts'
+import { ActionButton, useApp, useScreen, type Work } from './ui.tsx'
 
 // @tag:device-state
 
@@ -21,6 +23,35 @@ export function DeviceLine ({ device }: { device: DeviceWithStatus }) {
   )
 }
 
+// @tag:device-flags
+/** Settings that used to need the parent's password on the child's tablet itself. */
+function DeviceFlags ({ device }: { device: DeviceWithStatus }) {
+  const toggle = (flag: DeviceFlag, on: boolean) => (): Work => ({
+    key: `flag-${device.deviceId}-${flag.name}`,
+    intent: 'device-flag',
+    body: { device: device.deviceId, flag: flag.name, on },
+    done: `${device.name}: ${flag.title} — ${on ? 'включено' : 'выключено'}`,
+    undo: () => ({ intent: 'device-flag', body: { device: device.deviceId, flag: flag.name, on: !on } })
+  })
+  const enabled = DEVICE_FLAGS.filter((flag) => (device.exFlags & flag.bit) !== 0).length
+  return (
+    <li><details class='others'>
+      <summary>Настройки планшета{enabled > 0 ? ` · включено: ${enabled}` : ''}</summary>
+      <ul class='plain'>
+        {DEVICE_FLAGS.map((flag) => {
+          const on = (device.exFlags & flag.bit) !== 0
+          return (
+            <li key={flag.name} class='device-line'>
+              <div class='grow'>{flag.title}<div class='muted small'>{on ? 'включено' : 'выключено'}</div></div>
+              <ActionButton work={toggle(flag, !on)}>{on ? 'Выключить' : 'Включить'}</ActionButton>
+            </li>
+          )
+        })}
+      </ul>
+    </details></li>
+  )
+}
+
 export function Devices () {
   const { child } = useApp()
   const view = useScreen<DevicesView>()
@@ -28,7 +59,7 @@ export function Devices () {
     <>
       <section class='card'>
         <h2>Планшеты {child.name}</h2>
-        {view.devices.length === 0 ? <p><b>Детский планшет ещё не подключён</b> — пока ограничивать нечего.</p> : <ul class='plain'>{view.devices.map((device) => <DeviceLine key={device.deviceId} device={device} />)}</ul>}
+        {view.devices.length === 0 ? <p><b>Детский планшет ещё не подключён</b> — пока ограничивать нечего.</p> : <ul class='plain'>{view.devices.map((device) => <Fragment key={device.deviceId}><DeviceLine device={device} /><DeviceFlags device={device} /></Fragment>)}</ul>}
         {view.appUsageProblem ? <p class='muted small'>Время за сегодня недоступно: {view.appUsageProblem}</p> : null}
       </section>
       {view.unassigned.length > 0
