@@ -54,6 +54,16 @@ const status: ServerDataStatus = {
         currentUserId: 'child1',
         cAppVersion: 250,
         isUserKeptSignedIn: false
+      }),
+      device({
+        deviceId: 'devC02',
+        name: 'School tablet',
+        model: 'generic-tablet',
+        currentUserId: 'child1',
+        cAppVersion: 250,
+        isUserKeptSignedIn: false,
+        cProtectionLevel: 'simple device admin',
+        hProtectionLevel: 'simple device admin'
       })
     ]
   },
