@@ -2,7 +2,7 @@ import { addBanActions, type BanSpec, removeBanActions, replaceBanActions } from
 import { ParentConsoleError } from '../core/errors.ts'
 import {
   addChild, allowCategoryUntil, allowChildUntil, blockCategory, grantExtraTime, lockChild,
-  moveApp, revokeExtraTime, setDailyLimit, setUrlFilter, unlockChild
+  moveApp, renameCategory, revokeExtraTime, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice } from '../core/overview.ts'
 import { answerRequest, setAppAllowance } from '../core/requests.ts'
@@ -202,6 +202,14 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
 
   // @tag:app-allowance
   'app-allow': (context, body) => setAppAllowance({ childId: child(context, body).id, packageName: str(body, 'package'), until: num(body, 'until') }),
+
+  // @tag:category-limits
+  'category-rename': (context, body) => {
+    const childId = child(context, body).id
+    const title = body.title
+    if (typeof title !== 'string') throw badRequest('title must be a string')
+    return renameCategory({ category: category(context, body, childId), title })
+  },
 
   // @tag:app-rule
   'app-rule': (context, body) => {

@@ -161,6 +161,7 @@ export interface SitesView {
 }
 
 export interface CategoryView {
+  id: string
   title: string
   rules: Rule[]
   apps: Array<{ packageName: string, title: string }>

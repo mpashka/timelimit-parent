@@ -12,7 +12,7 @@ import { ApiError } from '../../src/core/errors.ts'
 import { exportChild, overlayConfigs, planImport, type PortableConfig } from '../../src/core/config.ts'
 import { isId } from '../../src/core/ids.ts'
 import {
-  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, revokeExtraTime, setDailyLimit, setUrlFilter, undoLimitApp, unlockChild
+  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, renameCategory, revokeExtraTime, setDailyLimit, setUrlFilter, undoLimitApp, unlockChild
 } from '../../src/core/operations.ts'
 import { hashParentPassword } from '../../src/core/password.ts'
 import { MemoryStorage, SyncClient } from '../../src/core/session.ts'
@@ -78,7 +78,7 @@ before(async () => {
   const port = await freePort()
   server = spawn(process.execPath, ['build/index.js'], {
     cwd: serverDir,
-    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DATABASE_URL: `sqlite://${join(dataDir, 'e2e.db')}` },
+    env: { ...process.env, NODE_ENV: 'development', PORT: String(port), DATABASE_URL: process.env.TIMELIMIT_E2E_DATABASE_URL ?? `sqlite://${join(dataDir, 'e2e.db')}` },
     stdio: ['ignore', 'pipe', 'pipe']
   })
   server.stdout!.on('data', (chunk) => { output += String(chunk) })
@@ -268,4 +268,18 @@ test('device flags: each change touches only its own bits', async () => {
   assert.equal(await flags(), 0x402)
   await flag(0x2, false)
   assert.equal(await flags(), 0x400)
+})
+
+// @tag:category-limits
+test('a category title in any language with emoji comes back from the server exactly as typed', async () => {
+  const id = categoryByTitle(await session.sync(), 'YouTube').id
+  const title = 'Видео и мультики 🎬📺 — ёжик'
+  await session.push(renameCategory({ category: categoryByTitle(await session.sync(), 'YouTube'), title }))
+  assert.equal((await session.sync({ full: true })).categories[id].base?.title, title, 'a full sync reads back the same text')
+  const longest = '🎮'.repeat(255)
+  await session.push(renameCategory({ category: categoryByTitle(await session.sync(), title), title: longest }))
+  assert.equal((await session.sync({ full: true })).categories[id].base?.title, longest, '255 characters of four bytes each fit')
+  const stored = categoryByTitle(await session.sync(), longest)
+  assert.throws(() => renameCategory({ category: stored, title: longest + '🎮' }), /255/)
+  await session.push(renameCategory({ category: stored, title: 'YouTube' }))
 })

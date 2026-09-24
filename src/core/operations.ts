@@ -1,3 +1,4 @@
+import { CATEGORY_TITLE_MAX, categoryTitleProblem } from '../shared/category-title.ts'
 import { ParentConsoleError } from './errors.ts'
 import { generateId } from './ids.ts'
 import { ALL_DAYS, MINUTE_MAX, type ParentAction, type ServerRule, URL_FILTER_API_LEVEL, type UrlFilter } from './protocol.ts'
@@ -193,4 +194,12 @@ function requireChild (state: FamilyState, childId: string): User {
   const child = state.users.data.find((u) => u.id === childId)
   if (!child) throw new ParentConsoleError(`no user with id ${childId} in the cached state`, 'run `status` to sync')
   return child
+}
+
+// @tag:category-limits
+export function renameCategory ({ category, title }: { category: CategoryView, title: string }): ParentAction[] {
+  const problem = categoryTitleProblem(title)
+  if (problem !== null) throw new ParentConsoleError(`bad category title: ${problem}`, `a title is 1..${CATEGORY_TITLE_MAX} characters, any language and emoji`)
+  const newTitle = title.trim()
+  return newTitle === category.base.title ? [] : [{ type: 'UPDATE_CATEGORY_TITLE', categoryId: category.id, newTitle }]
 }

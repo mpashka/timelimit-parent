@@ -3,6 +3,9 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { parentCode } from '../src/core/parent-code.ts'
 import { answerCategoryId, answerRequest } from '../src/core/requests.ts'
+import { renameCategory } from '../src/core/operations.ts'
+import { childCategories } from '../src/core/state.ts'
+import { categoryTitleProblem } from '../src/shared/category-title.ts'
 import { appCard, guessCategory, usageDays } from '../src/core/apps.ts'
 import { fixtureState, moscow } from './helpers.ts'
 import { scheduleWindow, sleepWindow } from '../src/shared/schedules.ts'
@@ -56,4 +59,13 @@ test('study window on a Saturday evening is Monday morning', () => {
   const at = (day: number, minute: number) => timestampAt({ dayOfEpoch: day, minuteOfDay: minute }, tz)
   const study = [{ days: 0b0011111, start: 8 * 60, end: 14 * 60 - 1 }]
   assert.deepEqual(scheduleWindow('study', study, at(saturday, 20 * 60), tz), { start: at(saturday + 2, 8 * 60), end: at(saturday + 2, 14 * 60) })
+})
+
+test('a category title is the parent\'s own text: emoji count as one character, 255 at most, never empty', () => {
+  const category = childCategories(fixtureState(), 'child1').find((item) => item.id === 'games1')!
+  assert.deepEqual(renameCategory({ category, title: '  Игры 🎮 ' }), [{ type: 'UPDATE_CATEGORY_TITLE', categoryId: 'games1', newTitle: 'Игры 🎮' }])
+  assert.equal(categoryTitleProblem('🎮'.repeat(255)), null)
+  assert.match(categoryTitleProblem('🎮'.repeat(256)) ?? '', /255/)
+  assert.notEqual(categoryTitleProblem('   '), null)
+  assert.deepEqual(renameCategory({ category, title: category.base.title }), [])
 })

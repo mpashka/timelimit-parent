@@ -10,7 +10,7 @@ import { exportChild, overlayConfigs, planImport, type PortableConfig } from '..
 import { ParentConsoleError } from '../core/errors.ts'
 import { DEVICE_FLAGS, findDeviceFlag, isFlagIneffective, NOT_DEVICE_OWNER } from '../shared/device-flags.ts'
 import {
-  allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, setDailyLimit, setUrlFilter, unlockChild
+  allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
 import { ALL_DAYS, type ParentAction } from '../core/protocol.ts'
@@ -44,6 +44,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   limit set <category> <minutes|off> [--days mo-fr]
   limit app <package> <minutes> [--title T] [--days D]
   app move <package> <category|none>
+  category rename <category> <new title>  the parent's own words, any language and emoji
   filter show [child] | filter set [--allow a,b] [--block c,d] | filter off
   export [child] [--out FILE]
   import <file> [--new-child NAME --time-zone TZ] [--replace]
@@ -290,6 +291,10 @@ async function main (): Promise<void> {
         return apply(session, limitApp({ state, childId: owner.id, packageName: need(args[1], 'package'), minutes: parseDurationMinutes(need(args[2], 'minutes')), title: options.title, days }))
       }
       throw new ParentConsoleError(`unknown limit subcommand "${args[0] ?? ''}"`, 'use limit set | limit app')
+    }
+    case 'category': {
+      if (args[0] !== 'rename') throw new ParentConsoleError(`unknown category subcommand "${args[0] ?? ''}"`, 'use category rename <category> <new title>')
+      return apply(session, renameCategory({ category: category(need(args[1], 'category')), title: args.slice(2).join(' ') }))
     }
     case 'app': {
       if (args[0] !== 'move') throw new ParentConsoleError(`unknown app subcommand "${args[0] ?? ''}"`, 'use app move <package> <category|none>')

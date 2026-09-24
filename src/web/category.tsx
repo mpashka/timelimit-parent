@@ -2,7 +2,9 @@ import type { CategoryView } from './api.ts'
 import { appHref } from './apps.tsx'
 import { clockAfter, dayLabel, formatDaysRu, formatDuration } from './format.ts'
 import { formatClock } from '../shared/time.ts'
-import { useScreen } from './ui.tsx'
+import { useState } from 'preact/hooks'
+import { CATEGORY_TITLE_MAX, categoryTitleProblem } from '../shared/category-title.ts'
+import { SubmitButton, useApp, useBusy, useScreen } from './ui.tsx'
 
 // @tag:parent-console @tag:category-limits
 
@@ -16,7 +18,7 @@ export function CategoryDetails () {
     <>
       <p class='muted small'><a href='#/'>Сегодня</a> ›</p>
       <article class='card'>
-        <h2>{category.title}</h2>
+        <CategoryTitle category={category} />
         <h3>Неделя</h3>
         <div class='week'>
           {category.week.map((item) => (
@@ -57,5 +59,50 @@ export function CategoryDetails () {
         </div>
       </article>
     </>
+  )
+}
+
+/** The title is the parent's own words — whatever language, emoji included; the tablet shows it as typed. */
+function CategoryTitle ({ category }: { category: CategoryView }) {
+  const { run } = useApp()
+  const [draft, setDraft] = useState<string | null>(null)
+  const [phase, wrap] = useBusy()
+  if (draft === null) {
+    return (
+      <div class='row'>
+        <h2>{category.title}</h2>
+        <button type='button' class='link' onClick={() => setDraft(category.title)}>Изменить название</button>
+      </div>
+    )
+  }
+  const problem = categoryTitleProblem(draft)
+  const unchanged = draft.trim() === category.title
+  return (
+    <form class='form' onSubmit={(event) => {
+      event.preventDefault()
+      if (problem !== null || unchanged) return
+      const title = draft.trim()
+      void wrap(async () => {
+        const ok = await run({
+          key: `rename-${category.id}`,
+          intent: 'category-rename',
+          body: { category: category.id, title },
+          done: `Категория теперь «${title}»`,
+          undo: () => ({ intent: 'category-rename', body: { category: category.id, title: category.title } })
+        })
+        if (ok) setDraft(null)
+      })
+    }}>
+      <label>Название
+        <input type='text' autoFocus value={draft} onInput={(event) => setDraft(event.currentTarget.value)} />
+      </label>
+      <div class={problem ? 'error small' : 'muted small'}>
+        {problem ?? `До ${CATEGORY_TITLE_MAX} знаков, любой язык и эмодзи. Название видят и ребёнок на планшете, и вы.`}
+      </div>
+      <div class='chips'>
+        <SubmitButton phase={phase} disabled={problem !== null || unchanged}>Переименовать</SubmitButton>
+        <button type='button' onClick={() => setDraft(null)}>Отмена</button>
+      </div>
+    </form>
   )
 }
