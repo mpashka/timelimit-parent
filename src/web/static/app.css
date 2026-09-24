@@ -142,7 +142,11 @@ ul.plain { list-style: none; padding: 0; margin: 6px 0 10px; }
 .top .who { flex: 1; }
 .code { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
 .code small { display: block; font-size: .7rem; color: var(--muted); line-height: 1; }
-.code .digits { font-weight: 700; font-size: 1.05rem; letter-spacing: .04em; }
+.code .digits { font-weight: 700; font-size: 1.6rem; letter-spacing: .06em; }
+.code-menu { position: relative; }
+.code-popup { position: absolute; right: 0; top: 48px; width: min(16rem, 80vw); z-index: 5; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.code-popup p { margin: 6px 0 0; }
+.scrim.clear { background: transparent; }
 .ring { width: 28px; height: 28px; }
 .ring circle { fill: none; stroke-width: 3; }
 .ring .track { stroke: var(--line); }

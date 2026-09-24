@@ -1,6 +1,6 @@
 import { render } from 'preact'
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { type CodeView, type FamilyView, type RequestsView, intent, listenChanged, loadWebConfig, signOut, type WebConfig } from './api.ts'
+import { type CodeView, type FamilyView, type RequestsView, intent, view, listenChanged, loadWebConfig, signOut, type WebConfig } from './api.ts'
 import { Bans } from './bans.tsx'
 import { clockOf, errorText } from './format.ts'
 import { AppCard, Apps } from './apps.tsx'
@@ -19,6 +19,7 @@ import { Account, App, type AppContext, type IntentCall, Toast, type ToastMessag
 /** The page is told about changes, so this is only a safety net for an event stream that died quietly. */
 const SAFETY_RELOAD_MS = 5 * 60 * 1000
 const CLOCK_MS = 30000
+const CODE_SHOWN_MS = 60000
 
 const tabs = [
   { path: '', title: 'Сегодня', also: ['category'] },
@@ -281,32 +282,67 @@ function RequestsPanel ({ childId, revision, close }: { childId: string, revisio
   )
 }
 
-/** Six digits and a ring that runs out with them; a new code is asked for exactly when this one ends. */
+/**
+ * A key in the header; the six digits show only on a tap and hide after a minute, on a tap elsewhere
+ * or when the page goes to the background — a child looking over the shoulder sees no code at rest.
+ */
 // @tag:parent-code
 function ParentCode () {
-  const [revision, setRevision] = useState(0)
+  const [open, setOpen] = useState(false)
+  return (
+    <div class='code-menu'>
+      <button type='button' class={`bell ${open ? 'open' : ''}`} aria-expanded={open} aria-label='Код родителя'
+        onClick={() => setOpen((value) => !value)}>
+        <svg viewBox='0 0 24 24' aria-hidden='true'><circle cx='8' cy='15' r='4' /><path d='M11 12l8-8M16 7l3 3M14 9l2 2' /></svg>
+      </button>
+      {open ? <CodePopup close={() => setOpen(false)} /> : null}
+    </div>
+  )
+}
+
+function CodePopup ({ close }: { close: () => void }) {
   const [now, setNow] = useState(Date.now())
-  const code = useView<CodeView>('code', undefined, revision)
+  const [revision, setRevision] = useState(0)
+  const [code, setCode] = useState<{ data?: CodeView, problem?: string }>({})
   const validUntil = code.data?.validUntil ?? null
   useEffect(() => {
+    void view<CodeView>('code').then((answer) => setCode({ data: answer.data }), (ex: unknown) => setCode({ problem: errorText(ex).title }))
+  }, [revision])
+  useEffect(() => {
     const tick = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(tick)
+    const shown = setTimeout(close, CODE_SHOWN_MS)
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') close() }
+    const onHidden = () => { if (document.visibilityState === 'hidden') close() }
+    addEventListener('keydown', onKey)
+    document.addEventListener('visibilitychange', onHidden)
+    return () => { clearInterval(tick); clearTimeout(shown); removeEventListener('keydown', onKey); document.removeEventListener('visibilitychange', onHidden) }
   }, [])
   useEffect(() => {
     if (validUntil === null) return
     const timer = setTimeout(() => setRevision((value) => value + 1), Math.max(validUntil - Date.now(), 0) + 200)
     return () => clearTimeout(timer)
   }, [validUntil])
-  if (!code.data) return null
-  const left = Math.max(0, Math.min(30, Math.round((code.data.validUntil - now) / 1000)))
+  const left = code.data ? Math.max(0, Math.min(30, Math.round((code.data.validUntil - now) / 1000))) : 0
   return (
-    <div class='code' title='Код родителя: введите его на детском планшете в «Родитель рядом»'>
-      <svg class='ring' viewBox='0 0 24 24' aria-hidden='true'>
-        <circle class='track' cx='12' cy='12' r='9.5' />
-        <circle class='arc' cx='12' cy='12' r='9.5' pathLength='30' stroke-dasharray={`${left} 30`} transform='rotate(-90 12 12)' />
-      </svg>
-      <div><small>код родителя</small><span class='digits'>{code.data.code.slice(0, 3)} {code.data.code.slice(3)}</span></div>
-    </div>
+    <>
+      <div class='scrim clear' onClick={close} />
+      <div class='card code-popup' role='dialog' aria-label='Код родителя'>
+        {code.data
+          ? (
+            <>
+              <div class='code'>
+                <svg class='ring' viewBox='0 0 24 24' aria-hidden='true'>
+                  <circle class='track' cx='12' cy='12' r='9.5' />
+                  <circle class='arc' cx='12' cy='12' r='9.5' pathLength='30' stroke-dasharray={`${left} 30`} transform='rotate(-90 12 12)' />
+                </svg>
+                <span class='digits'>{code.data.code.slice(0, 3)} {code.data.code.slice(3)}</span>
+              </div>
+              <p class='muted small'>Код родителя, ещё {left} с. Введите его на детском планшете в «Родитель рядом».</p>
+            </>
+            )
+          : <p class='muted small'>{code.problem ? `Код не получен: ${code.problem}` : code.data === null ? 'Сервер синхронизации не выдаёт код родителя: он старше обновления с просьбами ребёнка.' : 'Загружаем код…'}</p>}
+      </div>
+    </>
   )
 }
 
