@@ -8,7 +8,7 @@ import { TimelimitApi, TOKEN_LIFETIME_MS } from '../core/api.ts'
 import { addBanActions, readBans, removeBanActions } from '../core/bans.ts'
 import { exportChild, overlayConfigs, planImport, type PortableConfig } from '../core/config.ts'
 import { ParentConsoleError } from '../core/errors.ts'
-import { DEVICE_FLAGS, findDeviceFlag } from '../shared/device-flags.ts'
+import { DEVICE_FLAGS, findDeviceFlag, isFlagIneffective, NOT_DEVICE_OWNER } from '../shared/device-flags.ts'
 import {
   allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
@@ -238,7 +238,7 @@ async function main (): Promise<void> {
           return { flag, on: value === 'on' }
         })
         if (changes.length === 0) {
-          const rows = DEVICE_FLAGS.map((flag) => [(device.exFlags & flag.bit) !== 0 ? 'on' : 'off', flag.name, flag.title])
+          const rows = DEVICE_FLAGS.map((flag) => [(device.exFlags & flag.bit) !== 0 ? 'on' : 'off', flag.name, isFlagIneffective(flag, device.cProtectionLevel) ? `${flag.title} — ${NOT_DEVICE_OWNER}` : flag.title])
           return print(`${device.name} (${device.deviceId})\n${table(['state', 'flag', 'what'], rows)}`, { deviceId: device.deviceId, exFlags: device.exFlags })
         }
         const mask = changes.reduce((bits, { flag }) => bits | flag.bit, 0)

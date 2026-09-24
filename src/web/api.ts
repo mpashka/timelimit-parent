@@ -24,6 +24,7 @@ export interface Device {
   model: string
   currentUserId: string
   exFlags: number // @tag:device-flags
+  cProtectionLevel: string
 }
 
 export interface Rule {
