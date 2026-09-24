@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import { parentCode } from '../src/core/parent-code.ts'
 import { answerCategoryId, answerRequest } from '../src/core/requests.ts'
 import { renameCategory } from '../src/core/operations.ts'
+import { requestAnswerActions, requestRows } from '../src/cli/requests.ts'
 import { childCategories } from '../src/core/state.ts'
 import { categoryTitleProblem } from '../src/shared/category-title.ts'
 import { appCard, guessCategory, usageDays } from '../src/core/apps.ts'
@@ -68,4 +69,21 @@ test('a category title is the parent\'s own text: emoji count as one character, 
   assert.match(categoryTitleProblem('🎮'.repeat(256)) ?? '', /255/)
   assert.notEqual(categoryTitleProblem('   '), null)
   assert.deepEqual(renameCategory({ category, title: category.base.title }), [])
+})
+
+test('CLI: request answer and deny parse into the same answers as the console', () => {
+  const state = fixtureState()
+  const now = moscow(14, 18, 20)
+  state.users.data.find((user) => user.id === 'child1')!.requests = [
+    { id: 'rq0001', packageName: 'com.roblox.client', categoryId: 'games1', deviceId: 'devC01', word: 'ещё', createdAt: now - 60000, expiresAt: now + 29 * 60000 }
+  ]
+  assert.deepEqual(requestAnswerActions({ state, args: ['answer', 'rq0001', 'app', '30m'], now }),
+    [{ type: 'ANSWER_CHILD_REQUEST', requestId: 'rq0001', answer: 'app', until: now + 30 * 60000, word: '' }])
+  const day = requestAnswerActions({ state, args: ['answer', 'rq0001', 'category', 'day'], word: 'до вечера', now })[0] as { until: number, word: string }
+  assert.ok(day.until > now && day.word === 'до вечера')
+  assert.deepEqual(requestAnswerActions({ state, args: ['deny', 'rq0001'], word: 'уроки', now }),
+    [{ type: 'ANSWER_CHILD_REQUEST', requestId: 'rq0001', answer: 'deny', until: 0, word: 'уроки' }])
+  assert.throws(() => requestAnswerActions({ state, args: ['answer', 'rq0001', 'app', '2h'], now }), /15m, 30m, 1h, day/)
+  assert.throws(() => requestAnswerActions({ state, args: ['answer', 'rq0001', 'all', '1h'], now }), /app or category/)
+  assert.deepEqual(requestRows(state, 'child1', now).map((row) => [row.id, row.status, row.device]), [['rq0001', 'waiting', state.devices.data.find((d) => d.deviceId === 'devC01')?.name]])
 })

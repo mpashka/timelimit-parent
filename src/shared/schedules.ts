@@ -52,3 +52,10 @@ export function scheduleWindow (kind: ScheduleKind, bans: Array<{ days: number, 
   }
   return best
 }
+
+/** Where «до конца дня» ends: the start of Sleep (ui-contract, «Решения 2026-09-23»), midnight without one. */
+export function dayEnd (bans: Array<{ days: number, start: number, end: number }>, now: number, timeZone: string): { dayEndsAt: number, sleep: { start: number, end: number } | null } {
+  const sleep = sleepWindow(bans, now, timeZone)
+  const midnight = timestampAt({ dayOfEpoch: localTime(now, timeZone).dayOfEpoch + 1, minuteOfDay: 0 }, timeZone)
+  return { dayEndsAt: sleep !== null && sleep.start > now && sleep.start < midnight + 6 * 3600_000 ? sleep.start : midnight, sleep }
+}

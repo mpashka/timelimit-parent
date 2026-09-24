@@ -21,6 +21,7 @@ import {
   configPath, FileStorage, ownDeviceId, readConfig, readDeviceToken, serverUrl, TOKEN_KEY, writeConfig
 } from './environment.ts'
 import { formatActions, formatOverview, hours, localDateTime, table } from './format.ts'
+import { requestAnswerActions, requestRows } from './requests.ts'
 
 const usage = `timelimit-parent — parent console for a TimeLimit server
 
@@ -44,6 +45,9 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   limit set <category> <minutes|off> [--days mo-fr]
   limit app <package> <minutes> [--title T] [--days D]
   app move <package> <category|none>
+  request list [child]                    waiting and today's requests of the child
+  request answer <id> app|category <15m|30m|1h|day> [--word W]   allow; day = until Sleep begins
+  request deny <id> [--word W]
   category rename <category> <new title>  the parent's own words, any language and emoji
   filter show [child] | filter set [--allow a,b] [--block c,d] | filter off
   export [child] [--out FILE]
@@ -80,6 +84,7 @@ const { values: options, positionals } = parseArgs({
     mail: { type: 'string' },
     'device-name': { type: 'string' },
     'google-id-token': { type: 'string' },
+    word: { type: 'string' },
     help: { type: 'boolean', short: 'h' }
   }
 })
@@ -291,6 +296,21 @@ async function main (): Promise<void> {
         return apply(session, limitApp({ state, childId: owner.id, packageName: need(args[1], 'package'), minutes: parseDurationMinutes(need(args[2], 'minutes')), title: options.title, days }))
       }
       throw new ParentConsoleError(`unknown limit subcommand "${args[0] ?? ''}"`, 'use limit set | limit app')
+    }
+    // @tag:child-request
+    case 'request': {
+      if (args[0] === 'list') {
+        const owner = child(args[1])
+        const rows = requestRows(state, owner.id, now)
+        const outcome = (row: ReturnType<typeof requestRows>[number]) => row.answer === null
+          ? row.status
+          : `${row.status === 'denied' ? 'denied' : `${row.answer.kind} until ${localDateTime(row.answer.until, owner.timeZone)}`} by ${row.answer.parentName}${row.answer.word ? ` «${row.answer.word}»` : ''}`
+        return print(
+          rows.length === 0 ? 'no requests today' : table(['id', 'app', 'tablet', 'asked', 'word', 'state'], rows.map((row) => [row.id, row.packageName, row.device, localDateTime(row.createdAt, owner.timeZone), row.word, outcome(row)])),
+          rows
+        )
+      }
+      return apply(session, requestAnswerActions({ state, args, word: options.word, now }))
     }
     case 'category': {
       if (args[0] !== 'rename') throw new ParentConsoleError(`unknown category subcommand "${args[0] ?? ''}"`, 'use category rename <category> <new title>')

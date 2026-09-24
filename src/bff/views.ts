@@ -8,7 +8,7 @@ import { NEW_UI_API_LEVEL, PARENT_SESSION_API_LEVEL, URL_FILTER_API_LEVEL } from
 import { answerCategoryId, requestStatus } from '../core/requests.ts'
 import { defaultScheduleCategories } from '../core/schedules.ts'
 import { childCategories, children, type FamilyState, parents } from '../core/state.ts'
-import { scheduleKind, sleepWindow } from '../shared/schedules.ts'
+import { dayEnd, scheduleKind } from '../shared/schedules.ts'
 import { localTime, timestampAt } from '../shared/time.ts'
 
 // @tag:parent-console
@@ -74,13 +74,6 @@ function requireChild (context: ViewContext): string {
   return child.id
 }
 
-/** «До конца дня» ends where Sleep begins, and at midnight when the child has no Sleep. */
-function dayEndsAt (context: ViewContext, bans: Array<{ days: number, start: number, end: number }>, timeZone: string): { dayEndsAt: number, sleep: { start: number, end: number } | null } {
-  const sleep = sleepWindow(bans, context.now, timeZone)
-  const midnight = timestampAt({ dayOfEpoch: localTime(context.now, timeZone).dayOfEpoch + 1, minuteOfDay: 0 }, timeZone)
-  return { dayEndsAt: sleep !== null && sleep.start > context.now && sleep.start < midnight + 6 * 3600_000 ? sleep.start : midnight, sleep }
-}
-
 const viewNow = (context: ViewContext) => {
   const childId = requireChild(context)
   const overview = childOverview(context.state, childId, context.now)
@@ -95,7 +88,7 @@ const viewNow = (context: ViewContext) => {
       const own = categoryViews.find((item) => item.id === category.id)
       return { ...category, dailyLimits: own ? dailyLimitRules(own) : [] }
     }),
-    ...dayEndsAt(context, overview.bans, overview.child.timeZone),
+    ...dayEnd(overview.bans, context.now, overview.child.timeZone),
     allowances,
     activeSchedule: overview.bans.filter((ban) => ban.activeNow).map((ban) => scheduleKind(ban)).find((kind) => kind !== null) ?? null,
     ...appsToday(context, childId),
@@ -193,7 +186,7 @@ const viewRequests = (context: ViewContext) => {
   const all = (overview.child.requests ?? []).map(describe)
   return {
     child: overview.child,
-    ...dayEndsAt(context, overview.bans, timeZone),
+    ...dayEnd(overview.bans, context.now, timeZone),
     waiting: all.filter((item) => item.status === 'waiting'),
     earlier: all.filter((item) => item.status !== 'waiting' && localTime(item.createdAt, timeZone).dayOfEpoch === today),
     supported: context.state.apiLevel >= NEW_UI_API_LEVEL
