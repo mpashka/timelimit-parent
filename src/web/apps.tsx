@@ -1,5 +1,6 @@
 import type { AppCardView, AppRule, AppsView, AppTime, NamedCategory, NewApp } from './api.ts'
 import { ALL_DAYS, clockOf, DAY_NAMES, dayLabel, formatDuration, formatUntil } from './format.ts'
+import { useRef, useState } from 'preact/hooks'
 import { ActionButton, useApp, useScreen } from './ui.tsx'
 
 // @tag:app-usage @tag:app-rule @tag:new-app
@@ -58,23 +59,41 @@ export function NewAppRow ({ app, categories }: { app: NewApp, categories: Named
   )
 }
 
+const matchesApp = (query: string) => {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  return (app: { title: string, packageName: string }): boolean => {
+    const text = `${app.title} ${app.packageName}`.toLowerCase()
+    return words.every((word) => text.includes(word))
+  }
+}
+
 export function Apps () {
   const view = useScreen<AppsView>()
+  const [query, setQuery] = useState('')
   const plain = (categories: AppsView['categories']): NamedCategory[] => categories.map(({ id, title }) => ({ id, title }))
+  const matches = matchesApp(query)
+  const searching = query.trim() !== ''
+  const categories = view.categories.map((category) => ({ ...category, apps: category.apps.filter(matches) }))
+    .filter((category) => !searching || category.apps.length > 0)
+  const other = view.other.filter(matches)
+  const newApps = view.newApps.filter(matches)
+  const found = newApps.length + other.length + categories.reduce((sum, category) => sum + category.apps.length, 0)
   return (
     <>
       <h2 class='section'>Приложения {view.child.name} за неделю</h2>
+      <input type='search' class='search' placeholder='Найти приложение' value={query} onInput={(event) => setQuery(event.currentTarget.value)} />
+      {searching && found === 0 ? <p class='muted small'>Ничего не нашлось. <button type='button' class='link' onClick={() => setQuery('')}>Показать все</button></p> : null}
       {view.appUsageProblem ? <p class='muted small'>Время по приложениям недоступно: {view.appUsageProblem}</p> : null}
-      {view.newApps.map((app) => <NewAppRow key={app.packageName} app={app} categories={plain(view.categories)} />)}
-      {view.categories.map((category) => (
+      {newApps.map((app) => <NewAppRow key={app.packageName} app={app} categories={plain(view.categories)} />)}
+      {categories.map((category) => (
         <section class='card' key={category.id}>
           <h2>{category.title}</h2>
           {category.apps.length === 0 ? <p class='muted small'>Приложений нет.</p> : null}
           {category.apps.map((app) => <WeekRow key={`${app.packageName}@${app.device ?? ''}`} app={app} />)}
         </section>
       ))}
-      {view.other.length > 0
-        ? <section class='card'><h2>Вне категорий</h2>{view.other.map((app) => <WeekRow key={app.packageName} app={app} />)}</section>
+      {other.length > 0
+        ? <section class='card'><h2>Вне категорий</h2>{other.map((app) => <WeekRow key={app.packageName} app={app} />)}</section>
         : null}
     </>
   )
@@ -107,6 +126,12 @@ export function AppCard () {
   const tz = child.timeZone
   const rule = view.rule ?? NO_RULE
   const max = Math.max(1, ...(view.days ?? []).map((item) => item.ms))
+  const [editing, setEditing] = useState<string | null>(null)
+  const menu = useRef<HTMLDetailsElement>(null)
+  const editOnDevice = (deviceId: string) => {
+    setEditing(deviceId)
+    if (menu.current) menu.current.open = false
+  }
 
   const setRule = (next: AppRule, done: string) => () => ({
     key: `rule-${next.days}-${next.limitMinutes}`,
@@ -139,6 +164,18 @@ export function AppCard () {
       <section class='card'>
         <div class='row'>
           <h2><AppIcon title={view.title} /> {view.title} {view.isNew ? <span class='tag'>новое</span> : null}</h2>
+          {view.devices.length > 1
+            ? (
+              <details class='menu' ref={menu}>
+                <summary aria-label='Ещё'>⋯</summary>
+                <div class='card'>
+                  {view.devices.map((device) => (
+                    <button type='button' class='link' key={device.deviceId} onClick={() => editOnDevice(device.deviceId)}>Своя категория на «{device.name}»</button>
+                  ))}
+                </div>
+              </details>
+              )
+            : null}
         </div>
         <div class='muted small'>
           {view.todayMs !== null ? `сегодня ${formatDuration(view.todayMs)} · в среднем ${formatDuration(view.averageMs ?? 0)} в день` : `время недоступно: ${view.appUsageProblem ?? 'нет данных'}`}
@@ -159,14 +196,15 @@ export function AppCard () {
       </section>
 
       <section class='card'>
-        <h3>Категория{view.devices.length > 1 ? ' на всех планшетах' : ''}</h3>
+        <h3>Категория</h3>
         <div class='chips'>
           {view.categories.map((category) => (
             <ActionButton key={category.id} class={view.category?.id === category.id ? 'primary' : ''} disabled={view.category?.id === category.id}
               work={move(category)}>{category.title}</ActionButton>
           ))}
         </div>
-        {view.devices.length > 1 ? view.devices.map((device) => <DeviceCategory key={device.deviceId} view={view} device={device} />) : null}
+        {view.devices.filter((device) => device.category !== null || device.deviceId === editing)
+          .map((device) => <DeviceCategory key={device.deviceId} view={view} device={device} />)}
       </section>
 
       <section class='card'>
@@ -214,7 +252,7 @@ export function AppCard () {
   )
 }
 
-/** A tablet's own category for the app: on that tablet it wins over the shared one, «как везде» removes it. */
+/** A tablet's own category for the app: on that tablet it wins over the shared one, «как везде» removes it. Shown while set, or opened from the card menu. */
 function DeviceCategory ({ view, device }: { view: AppCardView, device: AppCardView['devices'][number] }) {
   const move = (category: NamedCategory | null) => () => ({
     key: `move-${device.deviceId}-${category?.id ?? 'none'}`,

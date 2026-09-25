@@ -205,7 +205,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
           <svg viewBox='0 0 24 24' aria-hidden='true'><path d='M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0' /></svg>
           {waiting > 0 ? <span class='count'>{waiting}</span> : null}
         </button>
-        <details class='account-menu'>
+        <details class='menu'>
           <summary aria-label='Аккаунт'>⋯</summary>
           <div class='card'>
             <Account parent={parent} serverUrl={family.serverUrl} />
