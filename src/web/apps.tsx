@@ -70,7 +70,7 @@ export function Apps () {
         <section class='card' key={category.id}>
           <h2>{category.title}</h2>
           {category.apps.length === 0 ? <p class='muted small'>Приложений нет.</p> : null}
-          {category.apps.map((app) => <WeekRow key={app.packageName} app={app} />)}
+          {category.apps.map((app) => <WeekRow key={`${app.packageName}@${app.device ?? ''}`} app={app} />)}
         </section>
       ))}
       {view.other.length > 0
@@ -80,12 +80,13 @@ export function Apps () {
   )
 }
 
-function WeekRow ({ app }: { app: AppsView['other'][number] }) {
+function WeekRow ({ app }: { app: AppsView['other'][number] & { device?: string | null } }) {
   return (
     <a class='app-row' href={appHref(app.packageName)}>
       <AppIcon title={app.title} />
       <div class='grow'>
         <div class='name'>{app.title}</div>
+        {app.device ? <div class='muted small'>только на «{app.device}»</div> : null}
         {app.rule ? <div class='muted small'>{ruleText(app.rule)}</div> : null}
       </div>
       <span class='value'>{app.weekMs > 0 ? formatDuration(app.weekMs) : '—'}</span>
@@ -158,13 +159,14 @@ export function AppCard () {
       </section>
 
       <section class='card'>
-        <h3>Категория</h3>
+        <h3>Категория{view.devices.length > 1 ? ' на всех планшетах' : ''}</h3>
         <div class='chips'>
           {view.categories.map((category) => (
             <ActionButton key={category.id} class={view.category?.id === category.id ? 'primary' : ''} disabled={view.category?.id === category.id}
               work={move(category)}>{category.title}</ActionButton>
           ))}
         </div>
+        {view.devices.length > 1 ? view.devices.map((device) => <DeviceCategory key={device.deviceId} view={view} device={device} />) : null}
       </section>
 
       <section class='card'>
@@ -208,6 +210,29 @@ export function AppCard () {
           </section>
           )
         : null}
+    </>
+  )
+}
+
+/** A tablet's own category for the app: on that tablet it wins over the shared one, «как везде» removes it. */
+function DeviceCategory ({ view, device }: { view: AppCardView, device: AppCardView['devices'][number] }) {
+  const move = (category: NamedCategory | null) => () => ({
+    key: `move-${device.deviceId}-${category?.id ?? 'none'}`,
+    intent: 'app-move',
+    body: { package: view.packageName, device: device.deviceId, category: category?.id },
+    done: category ? `${view.title} на «${device.name}» — в «${category.title}»` : `${view.title} на «${device.name}» — как на всех`,
+    undo: () => ({ intent: 'app-move', body: { package: view.packageName, device: device.deviceId, category: device.category?.id } })
+  })
+  return (
+    <>
+      <h3>На «{device.name}»</h3>
+      <div class='chips'>
+        <ActionButton class={device.category === null ? 'primary' : ''} disabled={device.category === null} work={move(null)}>как везде</ActionButton>
+        {view.categories.map((category) => (
+          <ActionButton key={category.id} class={device.category?.id === category.id ? 'primary' : ''} disabled={device.category?.id === category.id}
+            work={move(category)}>{category.title}</ActionButton>
+        ))}
+      </div>
     </>
   )
 }

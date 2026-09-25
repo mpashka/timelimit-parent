@@ -114,6 +114,11 @@ const viewApps = (context: ViewContext) => {
       rule: rule === undefined ? null : { days: rule.days, limitMinutes: rule.limitMinutes }
     }
   }
+  const deviceNames = new Map(context.state.devices.data.map((device) => [device.deviceId, device.name]))
+  const entry = (specifier: string) => {
+    const [packageName, deviceId] = specifier.split('@')
+    return { ...row(packageName), device: deviceId === undefined ? null : deviceNames.get(deviceId) ?? 'удалённый планшет' }
+  }
   const assigned = new Set(categories.flatMap((category) => category.apps))
   return {
     child,
@@ -122,7 +127,7 @@ const viewApps = (context: ViewContext) => {
       id: category.id,
       title: category.base.title,
       apps: [...new Set([...category.apps.filter((app) => !app.includes(':')), ...week.filter((item) => item.category?.id === category.id).map((item) => item.packageName)])]
-        .map(row)
+        .map(entry)
         .sort((a, b) => b.weekMs - a.weekMs)
     })),
     other: week.filter((item) => !assigned.has(item.packageName)).map((item) => row(item.packageName)),

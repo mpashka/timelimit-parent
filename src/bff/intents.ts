@@ -1,3 +1,4 @@
+import { deviceSpecifier } from '../core/apps.ts'
 import { addBanActions, type BanSpec, removeBanActions, replaceBanActions } from '../core/bans.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import {
@@ -171,10 +172,12 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
   'app-move': (context, body) => {
     const childId = child(context, body).id
     const target = optionalStr(body, 'category')
+    const device = optionalStr(body, 'device')
+    const packageName = str(body, 'package')
     return moveApp({
       state: context.state,
       childId,
-      packageName: str(body, 'package'),
+      packageName: device ? deviceSpecifier(packageName, findDevice(context.state, device).deviceId) : packageName,
       target: target ? category(context, body, childId) : null
     })
   },

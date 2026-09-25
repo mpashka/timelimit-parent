@@ -47,6 +47,9 @@ export function guessCategory (state: FamilyState, childId: string, section: str
   return childCategories(state, childId).find((category) => hint.test(category.base.title))?.id ?? null
 }
 
+/** An app assigned on one tablet only; on that tablet it wins over the shared assignment (Android `AppSpecifier.kt`). */
+export const deviceSpecifier = (packageName: string, deviceId: string): string => `${packageName}@${deviceId}`
+
 export function categoryOfApp (state: FamilyState, childId: string, packageName: string): { id: string, title: string } | null {
   const found = childCategories(state, childId).find((category) => category.apps.includes(packageName))
   return found ? { id: found.id, title: found.base.title } : null
@@ -102,7 +105,8 @@ export function appCard (state: FamilyState, childId: string, packageName: strin
   const devices = state.devices.data.filter((device) => device.currentUserId === childId).map((device) => ({
     deviceId: device.deviceId,
     name: device.name,
-    weekMs: own === null ? null : own.filter((item) => item.deviceId === device.deviceId).reduce((sum, item) => sum + item.ms, 0)
+    weekMs: own === null ? null : own.filter((item) => item.deviceId === device.deviceId).reduce((sum, item) => sum + item.ms, 0),
+    category: categoryOfApp(state, childId, deviceSpecifier(packageName, device.deviceId))
   }))
   const rule = child.appRules?.find((item) => item.packageName === packageName) ?? null
   const allowance = child.appAllowances?.find((item) => item.packageName === packageName && item.until > now) ?? null

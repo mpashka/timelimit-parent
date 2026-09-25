@@ -9,6 +9,7 @@ import { childCategories } from '../src/core/state.ts'
 import { categoryTitleProblem } from '../src/shared/category-title.ts'
 import { appCard, guessCategory, usageDays } from '../src/core/apps.ts'
 import { fixtureState, moscow } from './helpers.ts'
+import { buildIntent } from '../src/bff/intents.ts'
 import { scheduleWindow, sleepWindow } from '../src/shared/schedules.ts'
 import { timestampAt } from '../src/shared/time.ts'
 
@@ -52,6 +53,16 @@ test('app card: the week sums both tablets per day, a store section guesses the 
   assert.equal(card.category?.id, 'games1')
   assert.equal(guessCategory(state, 'child1', 'game'), 'games1')
   assert.equal(guessCategory(state, 'child1', 'maps'), null)
+})
+
+test('an app moved on one tablet goes as <package>@<device> and shows on the card only for that tablet', () => {
+  const state = fixtureState()
+  const actions = buildIntent('app-move', { state, now: 0 }, { child: 'child1', package: 'com.game', device: 'devC01', category: 'allow1' })
+  assert.deepEqual(actions, [{ type: 'ADD_CATEGORY_APPS', categoryId: 'allow1', packageNames: ['com.game@devC01'] }])
+  state.categories.allow1.apps.push('com.game@devC01')
+  const card = appCard(state, 'child1', 'com.game', 0, null)
+  assert.equal(card.category?.id, 'games1')
+  assert.deepEqual(card.devices.map((device) => [device.deviceId, device.category?.id ?? null]), [['devC01', 'allow1'], ['devC02', null]])
 })
 
 test('study window on a Saturday evening is Monday morning', () => {

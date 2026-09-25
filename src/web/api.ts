@@ -77,7 +77,7 @@ export interface AppRule { days: number, limitMinutes: number }
 export interface AppsView {
   child: Person
   newApps: NewApp[]
-  categories: Array<NamedCategory & { apps: Array<{ packageName: string, title: string, weekMs: number, rule: AppRule | null }> }>
+  categories: Array<NamedCategory & { apps: Array<{ packageName: string, title: string, weekMs: number, rule: AppRule | null, device: string | null }> }>
   other: Array<{ packageName: string, title: string, weekMs: number, rule: AppRule | null }>
   appUsageProblem: string | null
 }
@@ -91,7 +91,7 @@ export interface AppCardView {
   days: Array<{ day: number, ms: number }> | null
   todayMs: number | null
   averageMs: number | null
-  devices: Array<{ deviceId: string, name: string, weekMs: number | null }>
+  devices: Array<{ deviceId: string, name: string, weekMs: number | null, category: NamedCategory | null }>
   rule: AppRule | null
   allowanceUntil: number | null
   appUsageProblem: string | null
