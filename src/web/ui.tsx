@@ -179,3 +179,33 @@ export function Toast ({ toast, close }: { toast: ToastMessage | null, close: ()
     </div>
   )
 }
+
+/**
+ * The one menu of actions on a row — app, category or tablet alike: a visible ⋮, a popup at the
+ * button in a browser and a sheet from the bottom on a phone. Any button or link inside closes it.
+ */
+export function RowMenu ({ title, subtitle, children }: { title: string, subtitle?: string, children: ComponentChildren }) {
+  const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    addEventListener('keydown', onKey)
+    return () => removeEventListener('keydown', onKey)
+  }, [open])
+  return (
+    <span class='row-menu'>
+      <button type='button' class={`more ${open ? 'on' : ''}`} aria-label={`Действия: ${title}`} aria-expanded={open} onClick={() => setOpen(!open)}>⋮</button>
+      {open
+        ? (
+          <>
+            <div class='scrim menu-scrim' onClick={() => setOpen(false)} />
+            <div class='menu-sheet' role='menu' onClick={(event) => { if ((event.target as HTMLElement).closest('button, a')) setOpen(false) }}>
+              <div class='menu-head'><b>{title}</b>{subtitle ? <div class='muted small'>{subtitle}</div> : null}</div>
+              {children}
+            </div>
+          </>
+          )
+        : null}
+    </span>
+  )
+}

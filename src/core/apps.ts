@@ -55,20 +55,30 @@ export function categoryOfApp (state: FamilyState, childId: string, packageName:
   return found ? { id: found.id, title: found.base.title } : null
 }
 
-export interface AppTime { packageName: string, title: string, ms: number, category: { id: string, title: string } | null }
+export interface AppTime { packageName: string, title: string, ms: number, byDevice: Record<string, number>, category: { id: string, title: string } | null }
 
-/** Time per app, summed over the child's tablets, for the given days, the longest first. */
+/** Time per app, summed over the child's tablets and kept per tablet, for the given days, the longest first. */
 export function appTimes (state: FamilyState, childId: string, usage: AppUsageItem[], fromDay: number, toDay: number): AppTime[] {
-  const total = new Map<string, number>()
+  const byApp = new Map<string, Record<string, number>>()
   for (const item of usage) {
-    if (item.day < fromDay || item.day > toDay) continue
-    total.set(item.packageName, (total.get(item.packageName) ?? 0) + item.ms)
+    if (item.day < fromDay || item.day > toDay || item.ms <= 0) continue
+    const byDevice = byApp.get(item.packageName) ?? {}
+    byDevice[item.deviceId] = (byDevice[item.deviceId] ?? 0) + item.ms
+    byApp.set(item.packageName, byDevice)
   }
-  return [...total.entries()]
-    .filter(([, ms]) => ms > 0)
-    .map(([packageName, ms]) => ({ packageName, title: appTitle(state, packageName), ms, category: categoryOfApp(state, childId, packageName) }))
+  return [...byApp.entries()]
+    .map(([packageName, byDevice]) => ({
+      packageName,
+      title: appTitle(state, packageName),
+      ms: Object.values(byDevice).reduce((sum, ms) => sum + ms, 0),
+      byDevice,
+      category: categoryOfApp(state, childId, packageName)
+    }))
     .sort((a, b) => b.ms - a.ms)
 }
+
+/** The package an app specifier names: `pkg`, `pkg@device` (one tablet) or `pkg:activity`. */
+export const packageOf = (specifier: string): string => specifier.split(/[@:]/)[0]
 
 export function newApps (state: FamilyState, childId: string) {
   const child = state.users.data.find((user) => user.id === childId)

@@ -10,6 +10,7 @@ import { categoryTitleProblem } from '../src/shared/category-title.ts'
 import { appCard, guessCategory, usageDays } from '../src/core/apps.ts'
 import { fixtureState, moscow } from './helpers.ts'
 import { buildIntent } from '../src/bff/intents.ts'
+import { buildView } from '../src/bff/views.ts'
 import { scheduleWindow, sleepWindow } from '../src/shared/schedules.ts'
 import { timestampAt } from '../src/shared/time.ts'
 
@@ -97,4 +98,25 @@ test('CLI: request answer and deny parse into the same answers as the console', 
   assert.throws(() => requestAnswerActions({ state, args: ['answer', 'rq0001', 'app', '2h'], now }), /15m, 30m, 1h, day/)
   assert.throws(() => requestAnswerActions({ state, args: ['answer', 'rq0001', 'all', '1h'], now }), /app or category/)
   assert.deepEqual(requestRows(state, 'child1', now).map((row) => [row.id, row.status, row.device]), [['rq0001', 'waiting', state.devices.data.find((d) => d.deviceId === 'devC01')?.name]])
+})
+
+// @tag:category-time
+test('now view: a category without a limit takes its time from its apps, per tablet kept for the filter', () => {
+  const state = fixtureState()
+  const now = moscow(14, 15)
+  const { toDay } = usageDays(state, 'child1', now)
+  const items = [
+    { deviceId: 'devC01', day: toDay, packageName: 'com.dialer', ms: 0 },
+    { deviceId: 'devC01', day: toDay, packageName: 'com.android.dialer', ms: 120000 },
+    { deviceId: 'devC02', day: toDay, packageName: 'com.android.dialer', ms: 60000 }
+  ]
+  const view = buildView('now', { state, now, childId: 'child1', serverUrl: '', signedInUserId: 'parent1', appUsage: { items } }) as {
+    categories: Array<{ id: string, usedTodayMs: number, limitNowMs: number | null, appList: Array<{ packageName: string }> }>
+    apps: Array<{ packageName: string, byDevice: Record<string, number> }>
+  }
+  const allowed = view.categories.find((category) => category.id === 'allow1')!
+  assert.equal(allowed.limitNowMs, null)
+  assert.equal(allowed.usedTodayMs, 180000)
+  assert.deepEqual(allowed.appList.map((app) => app.packageName), ['com.android.dialer'])
+  assert.deepEqual(view.apps.map((app) => [app.packageName, app.byDevice]), [['com.android.dialer', { devC01: 120000, devC02: 60000 }]])
 })

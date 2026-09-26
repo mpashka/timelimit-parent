@@ -1,46 +1,279 @@
-import type { Ban, CategoryNow, NowView } from './api.ts'
-import { banEndsAt, clockOf, dailyLimitOf, formatDuration, formatUntil, loopholeText } from './format.ts'
-import { AppRow, NewAppRow } from './apps.tsx'
-import { DeviceLine } from './devices.tsx'
-import { countAdvancedOpened } from './store.ts'
-import { ActionButton, useApp, useScreen } from './ui.tsx'
+import type { AppRule, AppTime, Ban, CategoryNow, DeviceWithStatus, NowView } from './api.ts'
+import { ALL_DAYS, banEndsAt, clockOf, dailyLimitOf, formatDuration, formatUntil, loopholeText } from './format.ts'
+import { useState } from 'preact/hooks'
+import { AppIcon, appHref, NewAppRow, ruleText } from './apps.tsx'
+import { statusText } from './devices.tsx'
+import { countAdvancedOpened, readLocal, writeLocal } from './store.ts'
+import { ActionButton, RowMenu, useApp, useScreen } from './ui.tsx'
 
 // @tag:parent-console
 
 const GRANTS = [15, 30, 60]
 const MINUTE = 60000
+/** Less than this a day is noise: such rows wait behind «ещё N — меньше минуты». */
+const NOTICEABLE_MS = MINUTE
 
+type Tab = 'apps' | 'categories'
+
+/** Time first: what went where today, by app or by category, on all tablets or on one; actions live in the ⋮ of a row. */
 export function Home () {
   const view = useScreen<NowView>()
-  const categoryTotal = view.categories.filter((c) => c.depth === 0).reduce((sum, c) => sum + c.usedTodayMs, 0)
-  const total = view.apps === null ? categoryTotal : view.apps.reduce((sum, app) => sum + app.ms, 0)
+  const [tab, setTab] = useState<Tab>(readLocal('homeTab') === 'categories' ? 'categories' : 'apps')
+  const [devicesShown, setDevicesShown] = useState(false)
+  const [deviceId, setDeviceId] = useState<string | null>(null)
+  const device = view.devices.find((item) => item.deviceId === deviceId) ?? null
+  const apps = (view.apps ?? [])
+    .map((app) => device === null ? app : { ...app, ms: app.byDevice[device.deviceId] ?? 0 })
+    .filter((app) => app.ms > 0)
+    .sort((a, b) => b.ms - a.ms)
+  const total = view.apps === null
+    ? view.categories.filter((c) => c.depth === 0).reduce((sum, c) => sum + c.usedTodayMs, 0)
+    : apps.reduce((sum, app) => sum + app.ms, 0)
   const categories = view.categories.filter((c) => c.depth === 0).map(({ id, title }) => ({ id, title }))
-  const max = Math.max(0, ...(view.apps ?? []).map((app) => app.ms))
+  const choose = (next: Tab) => { writeLocal('homeTab', next); setTab(next) }
   return (
     <div class='columns'>
       <div>
-        <section class='hero'>
-          <div class='muted small'>Сегодня</div>
-          <div class='big'>{formatDuration(total)}{view.devices.length > 1 ? <small class='muted'> на {view.devices.length} планшетах</small> : null}</div>
+        <section class='hero row'>
+          <div>
+            <div class='muted small'>Сегодня{device ? ` на «${device.name}»` : ''}</div>
+            <div class='big'>{formatDuration(total)}</div>
+          </div>
+          {view.devices.length > 0
+            ? <button type='button' class={`link ${devicesShown ? 'on' : ''}`} aria-expanded={devicesShown} onClick={() => setDevicesShown(!devicesShown)}>
+                Планшеты · {view.devices.length} {devicesShown ? '▴' : '▾'}
+              </button>
+            : null}
         </section>
         {view.devices.length === 0 ? <ChildDevices /> : null}
-        {view.newApps.length > 0 || (view.apps ?? []).length > 0 ? <h2 class='section'>Приложения <a class='small' href='#/apps'>все</a></h2> : null}
+        {devicesShown
+          ? (
+            <section class='list'>
+              {view.devices.map((item) => (
+                <DeviceRow key={item.deviceId} device={item} chosen={item.deviceId === deviceId} choose={() => setDeviceId(item.deviceId === deviceId ? null : item.deviceId)} />
+              ))}
+            </section>
+            )
+          : null}
+        {device
+          ? <p class='filter'><span class='chip on'>Только «{device.name}» <button type='button' class='link' aria-label='Все планшеты' onClick={() => setDeviceId(null)}>✕</button></span></p>
+          : null}
         {view.newApps.map((app) => <NewAppRow key={app.packageName} app={app} categories={categories} />)}
-        <section class='list'>
-          {(view.apps ?? []).map((app) => <AppRow key={app.packageName} app={app} max={max} />)}
-        </section>
+        <div class='view-tabs' role='tablist'>
+          <button type='button' role='tab' aria-selected={tab === 'apps'} onClick={() => choose('apps')}>Приложения</button>
+          <button type='button' role='tab' aria-selected={tab === 'categories'} onClick={() => choose('categories')}>Категории</button>
+        </div>
+        {tab === 'apps'
+          ? <AppList apps={apps} />
+          : <CategoryTree apps={apps} deviceChosen={device !== null} />}
         {view.appUsageProblem ? <p class='muted small'>Время по приложениям недоступно: {view.appUsageProblem}</p> : null}
       </div>
       <div>
         <ModeBox />
         <Allowances />
-        <h2 class='section'>Категории</h2>
-        <section class='list'>
-          {view.categories.map((category) => <CategoryRow key={category.id} category={category} />)}
-        </section>
         <Loopholes />
-        {view.devices.length > 0 ? <ChildDevices /> : null}
       </div>
+    </div>
+  )
+}
+
+function DeviceRow ({ device, chosen, choose }: { device: DeviceWithStatus, chosen: boolean, choose: () => void }) {
+  return (
+    <div class={`line ${chosen ? 'chosen' : ''}`}>
+      <button type='button' class='line-main' aria-pressed={chosen} onClick={choose}>
+        <i class={device.status.online ? 'dot on' : 'dot'} aria-hidden='true' />
+        <span class='grow'><span class='name'>{device.name}</span><span class='muted small'>{statusText(device)}</span></span>
+        {device.status.todayMs !== null ? <span class='value'>{formatDuration(device.status.todayMs)}</span> : null}
+      </button>
+      <RowMenu title={device.name} subtitle={statusText(device)}>
+        <button type='button' class='item' onClick={choose}>{chosen ? 'Все планшеты' : 'Что делали на нём'}</button>
+        <a class='item' href='#/tablets'>Настройки планшета ›</a>
+      </RowMenu>
+    </div>
+  )
+}
+
+/** Apps by time, the noticeable ones; the rest behind one line that says how many and why hidden. */
+function AppList ({ apps }: { apps: AppTime[] }) {
+  const [all, setAll] = useState(false)
+  const shown = all ? apps : apps.filter((app) => app.ms >= NOTICEABLE_MS)
+  const hidden = apps.length - shown.length
+  const max = Math.max(0, ...apps.map((app) => app.ms))
+  if (apps.length === 0) return <p class='muted small'>Сегодня приложения не открывали.</p>
+  return (
+    <section class='list'>
+      {shown.map((app) => <AppLine key={app.packageName} app={app} ms={app.ms} max={max} showCategory />)}
+      {hidden > 0 ? <button type='button' class='foot' onClick={() => setAll(true)}>Ещё {hidden} — меньше минуты <span>показать</span></button> : null}
+    </section>
+  )
+}
+
+function AppLine ({ app, ms, max, showCategory = false }: { app: { packageName: string, title: string, category?: { title: string } | null }, ms: number | null, max: number, showCategory?: boolean }) {
+  const view = useScreen<NowView>()
+  const rule = view.appRules.find((item) => item.packageName === app.packageName) ?? null
+  const note = [showCategory && app.category ? app.category.title : '', rule ? ruleText(rule) : ''].filter(Boolean).join(' · ')
+  return (
+    <div class='line'>
+      <a class='line-main' href={appHref(app.packageName)}>
+        <AppIcon title={app.title} />
+        <span class='grow'>
+          <span class='name'>{app.title}</span>
+          {note ? <span class='muted small'>{note}</span> : null}
+          {ms !== null && max > 0 ? <span class='bar'><i style={{ width: `${Math.round(ms / max * 100)}%` }} /></span> : null}
+        </span>
+        <span class='value'>{ms === null || ms === 0 ? '—' : formatDuration(ms)}</span>
+      </a>
+      <AppMenu app={app} rule={rule} />
+    </div>
+  )
+}
+
+// @tag:app-allowance @tag:app-rule
+function AppMenu ({ app, rule }: { app: { packageName: string, title: string }, rule: AppRule | null }) {
+  const { now } = useApp()
+  const view = useScreen<NowView>()
+  const tz = view.child.timeZone
+  const allowanceUntil = view.allowances.find((item) => item.packageName === app.packageName)?.until ?? null
+  const current = rule ?? { days: ALL_DAYS, limitMinutes: -1 }
+  const closed = current.days === 0
+  const allow = (minutes: number) => () => {
+    const until = Math.max(now, allowanceUntil ?? 0) + minutes * MINUTE
+    return {
+      key: `allow-${app.packageName}-${minutes}`,
+      intent: 'app-allow',
+      body: { package: app.packageName, until },
+      done: `${app.title}: разрешено ${formatUntil(until, now, tz)}`,
+      undo: () => ({ intent: 'app-allow', body: { package: app.packageName, until: allowanceUntil ?? 0 } })
+    }
+  }
+  const close = () => ({
+    key: `close-app-${app.packageName}`,
+    intent: 'app-rule',
+    body: { package: app.packageName, ...current, days: closed ? ALL_DAYS : 0 },
+    done: closed ? `${app.title} снова открывается` : `${app.title} закрыто всегда`,
+    undo: () => ({ intent: 'app-rule', body: { package: app.packageName, ...current } })
+  })
+  return (
+    <RowMenu title={app.title} subtitle={allowanceUntil ? `разрешено ${formatUntil(allowanceUntil, now, tz)}` : undefined}>
+      <div class='item-label'>Разрешить сверх лимита</div>
+      <div class='chips grants'>{GRANTS.map((minutes) => <ActionButton key={minutes} work={allow(minutes)}>+{formatDuration(minutes * MINUTE)}</ActionButton>)}</div>
+      <ActionButton class='item closer' work={close}>{closed ? 'Открыть снова' : 'Закрыть всегда'}</ActionButton>
+      <a class='item' href={appHref(app.packageName)}>Категория, свой лимит, неделя ›</a>
+    </RowMenu>
+  )
+}
+
+/** The category tree: headers with tree lines; one category open at a time, its apps on their own backing. */
+// @tag:category-tree
+function CategoryTree ({ apps, deviceChosen }: { apps: AppTime[], deviceChosen: boolean }) {
+  const view = useScreen<NowView>()
+  const [open, setOpen] = useState<string | null>(null)
+  const siblings = (category: CategoryNow) => view.categories.filter((item) => item.parentId === category.parentId)
+  return (
+    <section class='list tree'>
+      {view.categories.map((category) => {
+        const list = siblings(category)
+        return (
+          <CategoryNode key={category.id} category={category} apps={apps} deviceChosen={deviceChosen}
+            last={list[list.length - 1]?.id === category.id} open={open === category.id} toggle={() => setOpen(open === category.id ? null : category.id)} />
+        )
+      })}
+    </section>
+  )
+}
+
+function descendantIds (categories: CategoryNow[], id: string): Set<string> {
+  const result = new Set([id])
+  for (let grew = true; grew;) {
+    grew = false
+    for (const item of categories) {
+      if (item.parentId !== null && result.has(item.parentId) && !result.has(item.id)) { result.add(item.id); grew = true }
+    }
+  }
+  return result
+}
+
+/** What stands in the way now, in a few words, or null when nothing does. */
+function stateText (category: CategoryNow, view: NowView, now: number): string | null {
+  const tz = view.child.timeZone
+  const activeBan: Ban | undefined = view.bans.find((ban) => ban.activeNow && ban.categoryIds.includes(category.id))
+  if (category.temporarilyBlocked) return `закрыто ${category.temporarilyBlocked.until ? formatUntil(category.temporarilyBlocked.until, now, tz) : 'до снятия'}`
+  if (category.blockedNow === 'ban' || category.blockedNow === 'legacy-blocked-time') return `запрет ${activeBan ? formatUntil(banEndsAt(activeBan, now, tz), now, tz) : ''}`.trim()
+  if (category.blockedNow === 'limit-reached') return 'время вышло'
+  if (category.blockedByParent) return `закрыто вместе с «${view.categories.find((c) => c.id === category.blockedByParent)?.title ?? ''}»`
+  if (category.limitsDisabledUntil) return `лимиты сняты ${formatUntil(category.limitsDisabledUntil, now, tz)}`
+  return null
+}
+
+function CategoryNode ({ category, apps, deviceChosen, last, open, toggle }: {
+  category: CategoryNow, apps: AppTime[], deviceChosen: boolean, last: boolean, open: boolean, toggle: () => void
+}) {
+  const { now } = useApp()
+  const view = useScreen<NowView>()
+  const ids = descendantIds(view.categories, category.id)
+  const deviceMs = apps.filter((app) => app.category !== null && ids.has(app.category.id)).reduce((sum, app) => sum + app.ms, 0)
+  const remaining = category.remaining?.includingExtraTime ?? null
+  const limit = category.limitNowMs
+  const state = stateText(category, view, now)
+  const blocked = category.blockedNow !== null || category.blockedByParent !== null
+  const tone = blocked ? 'closed' : remaining !== null && remaining < 15 * MINUTE ? 'warn' : 'ok'
+  const value = deviceChosen
+    ? formatDuration(deviceMs)
+    : remaining !== null ? `осталось ${formatDuration(remaining)}` : formatDuration(category.usedTodayMs)
+  return (
+    <>
+      <div class={`line category depth-${Math.min(category.depth, 3)} ${category.depth > 0 ? 'branch' : ''} ${last ? 'last' : ''} ${open ? 'open' : ''}`}
+        style={{ '--depth': category.depth }}>
+        <button type='button' class='line-main' aria-expanded={open} onClick={toggle}>
+          <span class='chev' aria-hidden='true'>›</span>
+          <span class='grow'>
+            <span class='name'>{category.title}</span>
+            {state
+              ? <span class={`small state ${tone}`}>{state}</span>
+              : limit === null ? <span class='muted small'>без лимита</span> : null}
+            {limit !== null && !deviceChosen
+              ? <span class={`bar ${tone}`}><i style={{ width: `${Math.min(100, Math.round(category.usedTodayMs / (limit + category.extraTimeMs) * 100))}%` }} /></span>
+              : null}
+          </span>
+          <span class='value'>{value}{limit !== null && !deviceChosen ? <small class='muted'>{formatDuration(category.usedTodayMs)} из {formatDuration(limit)}</small> : null}</span>
+        </button>
+        <CategoryMenu category={category} />
+      </div>
+      {open ? <CategoryApps category={category} apps={apps} /> : null}
+    </>
+  )
+}
+
+type Mode = 'time' | 'manage'
+
+/** Inside an open category: its apps by time (only those used, «все» next to it) or all of them by name with the limit. */
+function CategoryApps ({ category, apps }: { category: CategoryNow, apps: AppTime[] }) {
+  const [mode, setMode] = useState<Mode>('time')
+  const [all, setAll] = useState(false)
+  const timeOf = new Map(apps.filter((app) => app.category?.id === category.id).map((app) => [app.packageName, app.ms]))
+  const everyApp = [...category.appList]
+  for (const [packageName] of timeOf) {
+    if (!everyApp.some((app) => app.packageName === packageName)) everyApp.push({ packageName, title: apps.find((app) => app.packageName === packageName)!.title })
+  }
+  const used = everyApp.filter((app) => (timeOf.get(app.packageName) ?? 0) >= NOTICEABLE_MS)
+    .sort((a, b) => (timeOf.get(b.packageName) ?? 0) - (timeOf.get(a.packageName) ?? 0))
+  const listed = mode === 'manage'
+    ? [...everyApp].sort((a, b) => a.title.localeCompare(b.title, 'ru'))
+    : all ? [...everyApp].sort((a, b) => (timeOf.get(b.packageName) ?? 0) - (timeOf.get(a.packageName) ?? 0) || a.title.localeCompare(b.title, 'ru')) : used
+  const max = Math.max(0, ...timeOf.values())
+  return (
+    <div class='category-apps'>
+      <div class='view-tabs small' role='tablist'>
+        <button type='button' role='tab' aria-selected={mode === 'time'} onClick={() => setMode('time')}>Время</button>
+        <button type='button' role='tab' aria-selected={mode === 'manage'} onClick={() => setMode('manage')}>Управление</button>
+      </div>
+      {mode === 'manage' ? <DailyLimit category={category} /> : null}
+      {listed.length === 0 ? <p class='muted small'>{everyApp.length === 0 ? 'В категории нет приложений.' : 'Сегодня приложения этой категории не открывали.'}</p> : null}
+      {listed.map((app) => <AppLine key={app.packageName} app={app} ms={timeOf.get(app.packageName) ?? 0} max={mode === 'time' ? max : 0} />)}
+      {mode === 'time' && !all && everyApp.length > used.length
+        ? <button type='button' class='foot' onClick={() => setAll(true)}>Все приложения категории · {everyApp.length} <span>показать</span></button>
+        : null}
+      {mode === 'manage' ? <p class='muted small'><a href={`#/category/${category.id}`} onClick={countAdvancedOpened}>Правила и неделя ›</a></p> : null}
     </div>
   )
 }
@@ -132,26 +365,18 @@ function Allowances () {
   )
 }
 
-/** Devices of the child and devices that joined but have no user yet; the entry to connecting another one. */
+/** Until a tablet is connected there is nothing to limit, and that is the first thing to say. */
 function ChildDevices () {
-  const view = useScreen<NowView>()
-  if (view.devices.length === 0) {
-    return (
-      <section class='card'>
-        <p><b>Детский планшет ещё не подключён</b> — пока ограничивать нечего.</p>
-        <button type='button' class='primary wide' onClick={() => { location.hash = '#/device' }}>Подключить планшет</button>
-      </section>
-    )
-  }
   return (
-    <>
-      <h2 class='section'>Планшеты <a class='small' href='#/tablets'>все</a></h2>
-      <ul class='plain card'>{view.devices.map((device) => <DeviceLine key={device.deviceId} device={device} />)}</ul>
-    </>
+    <section class='card'>
+      <p><b>Детский планшет ещё не подключён</b> — пока ограничивать нечего.</p>
+      <button type='button' class='primary wide' onClick={() => { location.hash = '#/device' }}>Подключить планшет</button>
+    </section>
   )
 }
 
-function CategoryRow ({ category }: { category: CategoryNow }) {
+/** One menu for a category: time for today first, then closing, then the lasting settings. */
+function CategoryMenu ({ category }: { category: CategoryNow }) {
   const { now } = useApp()
   const view = useScreen<NowView>()
   const tz = view.child.timeZone
@@ -183,72 +408,48 @@ function CategoryRow ({ category }: { category: CategoryNow }) {
         undo: () => ({ intent: 'grant', body: { category: category.id, minutes: -minutes } })
       })
 
+  const subtitle = [
+    remaining === null ? 'без лимита сейчас' : `осталось ${formatDuration(remaining)}`,
+    category.extraTimeMs > 0 ? `доп. ${formatDuration(category.extraTimeMs)}` : '',
+    !category.countsTimeNow && !category.blockedNow && !category.blockedByParent && !category.limitsDisabledUntil ? 'время сейчас не считается' : ''
+  ].filter(Boolean).join(' · ')
+
   return (
-    <article class='card category' style={{ marginInlineStart: `${category.depth * 12}px` }}>
-      <div class='row'>
-        <h2>{category.title}</h2>
-        <span class='remaining'>{remaining === null ? 'без лимита сейчас' : `осталось ${formatDuration(remaining)}`}</span>
-      </div>
-      {limit !== null
-        ? <progress max={limit + category.extraTimeMs} value={Math.min(category.usedTodayMs, limit + category.extraTimeMs)} />
-        : null}
-      <div class='muted small'>
-        сегодня {formatDuration(category.usedTodayMs)}
-        {limit !== null ? ` из ${formatDuration(limit)}` : ''}
-        {category.extraTimeMs > 0 ? ` · доп. ${formatDuration(category.extraTimeMs)}` : ''}
-        {' · '}<a href={`#/category/${category.id}`} onClick={countAdvancedOpened}>подробнее</a>
-      </div>
-      <div class='chips'>
-        {category.temporarilyBlocked
-          ? (
-            <span class='chip warn'>заблокировано {category.temporarilyBlocked.until ? formatUntil(category.temporarilyBlocked.until, now, tz) : 'до снятия'}
-              <ActionButton class='link' work={() => ({
-                key: `unblock-${category.id}`,
-                intent: 'lock',
-                body: { category: category.id, off: true },
-                done: `«${category.title}» разблокировано`,
-                undo: () => ({ intent: 'lock', body: { category: category.id, until: category.temporarilyBlocked?.until ?? undefined } })
-              })}>снять</ActionButton>
-            </span>
-            )
-          : null}
-        {banned
-          ? <span class='chip warn'>запрет {activeBan ? formatUntil(banEndsAt(activeBan, now, tz), now, tz) : ''}</span>
-          : null}
-        {category.limitsDisabledUntil
-          ? (
-            <span class='chip'>лимиты сняты {formatUntil(category.limitsDisabledUntil, now, tz)}
-              {ownLimitsOff
-                ? <ActionButton class='link' work={() => ({ key: `relimit-${category.id}`, intent: 'allow', body: { category: category.id, until: 0 }, done: `Лимиты «${category.title}» снова действуют`, undo: () => ({ intent: 'allow', body: { category: category.id, until: category.limitsDisabledUntil } }) })}>вернуть</ActionButton>
-                : null}
-            </span>
-            )
-          : null}
-        {category.blockedNow === 'limit-reached' ? <span class='chip warn'>время вышло</span> : null}
-        {category.blockedByParent ? <span class='chip'>заблокировано вместе с «{title(category.blockedByParent)}»</span> : null}
-        {!category.countsTimeNow && !category.blockedNow && !category.blockedByParent && !category.limitsDisabledUntil
-          ? <span class='chip'>время сейчас не считается</span>
-          : null}
-      </div>
-      <DailyLimit category={category} />
+    <RowMenu title={category.title} subtitle={subtitle}>
       {limit !== null || duringBan
         ? (
-          <div class='chips grants'>
-            {GRANTS.map((minutes) => <ActionButton key={minutes} work={grant(minutes)}>+{minutes}</ActionButton>)}
-            {activeBan ? <ActionButton class='link' work={allowFor(banEndsAt(activeBan, now, tz), 'end')}>до конца запрета</ActionButton> : null}
-            {view.sleep !== null && !category.temporarilyBlocked && category.depth === 0
-              ? <ActionButton class='closer' work={() => ({
-                key: `close-${category.id}`,
-                intent: 'lock',
-                body: { category: category.id, until: view.sleep!.end },
-                done: `«${category.title}» закрыто ${formatUntil(view.sleep!.end, now, tz)}`,
-                undo: () => ({ intent: 'lock', body: { category: category.id, off: true } })
-              })}>Закрыть до утра</ActionButton>
-              : null}
-          </div>
+          <>
+            <div class='item-label'>Добавить на сегодня</div>
+            <div class='chips grants'>
+              {GRANTS.map((minutes) => <ActionButton key={minutes} work={grant(minutes)}>+{formatDuration(minutes * MINUTE)}</ActionButton>)}
+              {activeBan ? <ActionButton class='link' work={allowFor(banEndsAt(activeBan, now, tz), 'end')}>до конца запрета</ActionButton> : null}
+            </div>
+          </>
           )
         : null}
-    </article>
+      {category.temporarilyBlocked
+        ? <ActionButton class='item' work={() => ({
+          key: `unblock-${category.id}`,
+          intent: 'lock',
+          body: { category: category.id, off: true },
+          done: `«${category.title}» открыто`,
+          undo: () => ({ intent: 'lock', body: { category: category.id, until: category.temporarilyBlocked?.until ?? undefined } })
+        })}>Открыть</ActionButton>
+        : view.sleep !== null && category.depth === 0
+          ? <ActionButton class='item closer' work={() => ({
+            key: `close-${category.id}`,
+            intent: 'lock',
+            body: { category: category.id, until: view.sleep!.end },
+            done: `«${category.title}» закрыто ${formatUntil(view.sleep!.end, now, tz)}`,
+            undo: () => ({ intent: 'lock', body: { category: category.id, off: true } })
+          })}>Закрыть до утра <span class='muted small'>до {clockOf(view.sleep.end)}</span></ActionButton>
+          : null}
+      {ownLimitsOff
+        ? <ActionButton class='item' work={() => ({ key: `relimit-${category.id}`, intent: 'allow', body: { category: category.id, until: 0 }, done: `Лимиты «${category.title}» снова действуют`, undo: () => ({ intent: 'allow', body: { category: category.id, until: category.limitsDisabledUntil } }) })}>Вернуть лимиты</ActionButton>
+        : null}
+      {category.blockedByParent ? <div class='item-label'>Закрыто вместе с «{title(category.blockedByParent)}»</div> : null}
+      <a class='item' href={`#/category/${category.id}`} onClick={countAdvancedOpened}>Правила и неделя ›</a>
+    </RowMenu>
   )
 }
 

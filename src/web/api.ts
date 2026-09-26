@@ -54,6 +54,9 @@ export interface CategoryNow {
   blockedByParent: string | null
   countsTimeNow: boolean
   dailyLimits: Rule[]
+  parentId: string | null
+  /** Every app the category holds, whether or not it was used today. */
+  appList: Array<{ packageName: string, title: string }>
 }
 
 export interface Ban extends BanSpec {
@@ -70,7 +73,7 @@ export interface AppAllowance { packageName: string, title: string, until: numbe
 // @tag:app-usage @tag:new-app @tag:device-state @tag:app-rule
 export interface DeviceStatus { online: boolean, seen: number | null, app: string | null, todayMs: number | null }
 export interface DeviceWithStatus extends Device { status: DeviceStatus }
-export interface AppTime { packageName: string, title: string, ms: number, category: NamedCategory | null }
+export interface AppTime { packageName: string, title: string, ms: number, byDevice: Record<string, number>, category: NamedCategory | null }
 export interface NewApp { packageName: string, title: string, section: string, installedAt: number, deviceId: string, device: string, guess: string | null }
 export interface AppRule { days: number, limitMinutes: number }
 
@@ -112,6 +115,7 @@ export interface NowView {
   allowances: AppAllowance[]
   apps: AppTime[] | null
   newApps: NewApp[]
+  appRules: Array<AppRule & { packageName: string }>
   loopholes: Loophole[]
   appUsageProblem: string | null
   activeSchedule: ScheduleKind | null

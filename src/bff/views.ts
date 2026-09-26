@@ -1,5 +1,5 @@
 import type { AppUsageItem } from '../core/api.ts'
-import { appCard, appTimes, appTitle, deviceStatus, newApps, usageDays } from '../core/apps.ts'
+import { appCard, appTimes, appTitle, deviceStatus, newApps, packageOf, usageDays } from '../core/apps.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import { dailyLimitRules } from '../core/operations.ts'
 import { childOverview, findChild, usageHistory } from '../core/overview.ts'
@@ -82,16 +82,29 @@ const viewNow = (context: ViewContext) => {
     .filter((item) => item.until > context.now)
     .map((item) => ({ ...item, title: appTitle(context.state, item.packageName) }))
   const categoryViews = childCategories(context.state, childId)
+  const today = appsToday(context, childId)
+  const descendants = (id: string): string[] =>
+    [id, ...overview.categories.filter((item) => item.parentId === id).flatMap((item) => descendants(item.id))]
   return {
     ...overview,
     categories: overview.categories.map((category) => {
       const own = categoryViews.find((item) => item.id === category.id)
-      return { ...category, dailyLimits: own ? dailyLimitRules(own) : [] }
+      const ids = new Set(descendants(category.id))
+      // @tag:category-time
+      // the tablet records a category's time only while a rule of it is active, the app time always
+      const appsMs = (today.apps ?? []).filter((app) => app.category !== null && ids.has(app.category.id)).reduce((sum, app) => sum + app.ms, 0)
+      return {
+        ...category,
+        usedTodayMs: category.limitNowMs === null ? Math.max(category.usedTodayMs, appsMs) : category.usedTodayMs,
+        dailyLimits: own ? dailyLimitRules(own) : [],
+        appList: [...new Set(category.apps.map(packageOf))].map((packageName) => ({ packageName, title: appTitle(context.state, packageName) }))
+      }
     }),
     ...dayEnd(overview.bans, context.now, overview.child.timeZone),
     allowances,
     activeSchedule: overview.bans.filter((ban) => ban.activeNow).map((ban) => scheduleKind(ban)).find((kind) => kind !== null) ?? null,
-    ...appsToday(context, childId),
+    ...today,
+    appRules: overview.child.appRules ?? [],
     devices: devicesOf(context, childId)
   }
 }

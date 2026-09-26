@@ -105,12 +105,15 @@ function mockApi (fullStatus, path, body) {
       return { apiLevel: fixture.apiLevel, fullVersion: 1, deviceStates: fixture.deviceStates, ...(joined ? { devices: { ...fixture.devices, version: `joined-${mockDeviceTokenAt}` } } : {}) }
     }
     case '/parent/get-app-usage': {
-      const apps = { 'com.game': 52, 'com.google.android.youtube': 38, 'org.school': 25, 'com.roblox.client': 0 }
+      const apps = { 'com.game': 52, 'com.google.android.youtube': 38, 'org.school': 25, 'com.roblox.client': 0, 'com.android.dialer': 0.4 }
+      const second = { 'org.school': 20, 'com.google.android.youtube': 9 }
       const items = []
       for (let day = body.fromDay; day <= body.toDay; day++) {
-        for (const [packageName, minutes] of Object.entries(apps)) {
-          const ms = Math.round(minutes * (0.6 + ((day * 7 + packageName.length) % 9) / 10) * 60000)
-          if (ms > 0) items.push({ deviceId: 'devC01', day, packageName, ms })
+        for (const [deviceId, list] of [['devC01', apps], ['devC02', second]]) {
+          for (const [packageName, minutes] of Object.entries(list)) {
+            const ms = Math.round(minutes * (0.6 + ((day * 7 + packageName.length) % 9) / 10) * 60000)
+            if (ms > 0) items.push({ deviceId, day, packageName, ms })
+          }
         }
       }
       return { items }
