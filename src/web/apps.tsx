@@ -1,4 +1,4 @@
-import type { AppCardView, AppRule, AppsView, AppTime, NamedCategory, NewApp } from './api.ts'
+import { type AppCardView, type AppFace, type AppRule, type AppsView, type AppTime, apiBase, type NamedCategory, type NewApp } from './api.ts'
 import { ALL_DAYS, clockOf, DAY_NAMES, dayLabel, formatDuration, formatUntil } from './format.ts'
 import { useRef, useState } from 'preact/hooks'
 import { ActionButton, useApp, useScreen } from './ui.tsx'
@@ -14,15 +14,21 @@ export const appHref = (packageName: string): string => `#/app/${encodeURICompon
 
 const letter = (title: string): string => (title.replace(/^(com|org|ru|io)\./, '')[0] ?? '?').toUpperCase()
 
-export function AppIcon ({ title }: { title: string }) {
-  return <span class='app-icon' aria-hidden='true'>{letter(title)}</span>
+/** The icon from Google Play or the tablet; the first letter while there is none or it does not load. */
+// @tag:app-icon
+export function AppIcon ({ app }: { app: Pick<AppFace, 'title' | 'icon'> }) {
+  const [broken, setBroken] = useState<string | null>(null)
+  if (app.icon !== null && broken !== app.icon) {
+    return <img class='app-icon' src={`${apiBase()}/${app.icon}`} alt='' loading='lazy' onError={() => setBroken(app.icon)} />
+  }
+  return <span class='app-icon' aria-hidden='true'>{letter(app.title)}</span>
 }
 
 /** A line of the app list: the time bar is relative to the longest app, the row leads to the card. */
 export function AppRow ({ app, max, note }: { app: AppTime, max: number, note?: string }) {
   return (
     <a class='app-row' href={appHref(app.packageName)}>
-      <AppIcon title={app.title} />
+      <AppIcon app={app} />
       <div class='grow'>
         <div class='name'>{app.title}{app.category ? <span class='muted small'> · {app.category.title}</span> : null}</div>
         {note ? <div class='muted small'>{note}</div> : <div class='bar'><i style={{ width: `${max > 0 ? Math.round(app.ms / max * 100) : 0}%` }} /></div>}
@@ -46,7 +52,7 @@ export function NewAppRow ({ app, categories }: { app: NewApp, categories: Named
   })
   return (
     <div class='app-row new'>
-      <AppIcon title={app.title} />
+      <AppIcon app={app} />
       <div class='grow'>
         <div class='name'><a href={appHref(app.packageName)}>{app.title}</a> <span class='tag'>новое</span></div>
         <div class='muted small'>поставлено {clockOf(app.installedAt)}{app.device ? ` на «${app.device}»` : ''} · пока закрыто у {child.name}</div>
@@ -102,7 +108,7 @@ export function Apps () {
 function WeekRow ({ app }: { app: AppsView['other'][number] & { device?: string | null } }) {
   return (
     <a class='app-row' href={appHref(app.packageName)}>
-      <AppIcon title={app.title} />
+      <AppIcon app={app} />
       <div class='grow'>
         <div class='name'>{app.title}</div>
         {app.device ? <div class='muted small'>только на «{app.device}»</div> : null}
@@ -163,7 +169,7 @@ export function AppCard () {
       <p class='muted small'><a href='#/apps'>Приложения</a> ›</p>
       <section class='card'>
         <div class='row'>
-          <h2><AppIcon title={view.title} /> {view.title} {view.isNew ? <span class='tag'>новое</span> : null}</h2>
+          <h2><AppIcon app={view} /> {view.title} {view.isNew ? <span class='tag'>новое</span> : null}</h2>
           {view.devices.length > 1
             ? (
               <details class='menu' ref={menu}>

@@ -1,4 +1,4 @@
-import type { AppRule, AppTime, Ban, CategoryNow, DeviceWithStatus, NowView } from './api.ts'
+import type { AppFace, AppRule, AppTime, Ban, CategoryNow, DeviceWithStatus, NowView } from './api.ts'
 import { ALL_DAYS, banEndsAt, clockOf, dailyLimitOf, formatDuration, formatUntil, loopholeText } from './format.ts'
 import { useState } from 'preact/hooks'
 import { AppIcon, appHref, NewAppRow, ruleText } from './apps.tsx'
@@ -108,14 +108,14 @@ function AppList ({ apps }: { apps: AppTime[] }) {
   )
 }
 
-function AppLine ({ app, ms, max, showCategory = false }: { app: { packageName: string, title: string, category?: { title: string } | null }, ms: number | null, max: number, showCategory?: boolean }) {
+function AppLine ({ app, ms, max, showCategory = false }: { app: AppFace & { category?: { title: string } | null }, ms: number | null, max: number, showCategory?: boolean }) {
   const view = useScreen<NowView>()
   const rule = view.appRules.find((item) => item.packageName === app.packageName) ?? null
   const note = [showCategory && app.category ? app.category.title : '', rule ? ruleText(rule) : ''].filter(Boolean).join(' · ')
   return (
     <div class='line'>
       <a class='line-main' href={appHref(app.packageName)}>
-        <AppIcon title={app.title} />
+        <AppIcon app={app} />
         <span class='grow'>
           <span class='name'>{app.title}</span>
           {note ? <span class='muted small'>{note}</span> : null}
@@ -253,7 +253,7 @@ function CategoryApps ({ category, apps }: { category: CategoryNow, apps: AppTim
   const timeOf = new Map(apps.filter((app) => app.category?.id === category.id).map((app) => [app.packageName, app.ms]))
   const everyApp = [...category.appList]
   for (const [packageName] of timeOf) {
-    if (!everyApp.some((app) => app.packageName === packageName)) everyApp.push({ packageName, title: apps.find((app) => app.packageName === packageName)!.title })
+    if (!everyApp.some((app) => app.packageName === packageName)) everyApp.push(apps.find((app) => app.packageName === packageName)!)
   }
   const used = everyApp.filter((app) => (timeOf.get(app.packageName) ?? 0) >= NOTICEABLE_MS)
     .sort((a, b) => (timeOf.get(b.packageName) ?? 0) - (timeOf.get(a.packageName) ?? 0))

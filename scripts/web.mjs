@@ -8,6 +8,7 @@ import { request as httpsRequest } from 'node:https'
 import { extname, join, normalize } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
+import { crc32, deflateSync } from 'node:zlib'
 import * as esbuild from 'esbuild'
 
 const root = new URL('..', import.meta.url).pathname
@@ -47,6 +48,34 @@ function copyStatic () {
 
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' }
 
+/** A 96×96 PNG, a coloured disc: enough for the layout to show a real icon next to the letters. */
+function mockIcon ([r, g, b]) {
+  const size = 96
+  const rows = []
+  for (let y = 0; y < size; y++) {
+    const row = [0]
+    for (let x = 0; x < size; x++) {
+      const inside = (x - 47.5) ** 2 + (y - 47.5) ** 2 < 40 ** 2
+      row.push(...(inside ? [r, g, b, 255] : [255, 255, 255, 255]))
+    }
+    rows.push(...row)
+  }
+  const chunk = (type, data) => {
+    const length = Buffer.alloc(4); length.writeUInt32BE(data.length)
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type), data])))
+    return Buffer.concat([length, Buffer.from(type), data, crc])
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(size, 0); header.writeUInt32BE(size, 4); header.set([8, 6, 0, 0, 0], 8)
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', header), chunk('IDAT', deflateSync(Buffer.from(rows))), chunk('IEND', Buffer.alloc(0))]).toString('base64')
+}
+
+// @tag:app-icon
+const MOCK_ICONS = {
+  'com.game': { title: 'Мир блоков', icon: mockIcon([47, 111, 79]) },
+  'com.google.android.youtube': { title: 'YouTube', icon: mockIcon([220, 40, 40]) }
+}
+
 let mockDeviceTokenAt = 0
 let mockFamilyWithoutChild = false
 
@@ -60,7 +89,7 @@ function mockApi (fullStatus, path, body) {
   const shift = today - 20710
   for (const item of fixture.usedTimes) for (const t of item.times) t.day += shift
   for (const base of fixture.categoryBase) if (base.extraTimeDay >= 0) base.extraTimeDay += shift
-  fixture.apiLevel = 12
+  fixture.apiLevel = 14
   // @tag:child-request @tag:parent-code
   fixture.users.parentCodeSecret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ'
   const asked = Date.now() - 6 * 60000
@@ -118,6 +147,8 @@ function mockApi (fullStatus, path, body) {
       }
       return { items }
     }
+    case '/parent/get-app-icons':
+      return { items: body.packageNames.filter((name) => MOCK_ICONS[name]).map((packageName) => ({ packageName, ...MOCK_ICONS[packageName] })) }
     case '/sync/push-actions':
       for (const item of body.actions) console.log('push', item.sequenceNumber, item.encodedAction)
       if (body.actions.some((item) => JSON.parse(item.encodedAction).type === 'ADD_USER')) mockFamilyWithoutChild = false

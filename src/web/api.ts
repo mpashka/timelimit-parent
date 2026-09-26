@@ -56,7 +56,7 @@ export interface CategoryNow {
   dailyLimits: Rule[]
   parentId: string | null
   /** Every app the category holds, whether or not it was used today. */
-  appList: Array<{ packageName: string, title: string }>
+  appList: AppFace[]
 }
 
 export interface Ban extends BanSpec {
@@ -68,26 +68,28 @@ export interface Ban extends BanSpec {
 
 export interface NamedCategory { id: string, title: string }
 
+/** An app as a row draws it; `icon` is a path under the BFF, `null` when neither Google Play nor a tablet gave one. */
+// @tag:app-icon
+export interface AppFace { packageName: string, title: string, icon: string | null }
+
 export interface AppAllowance { packageName: string, title: string, until: number }
 
 // @tag:app-usage @tag:new-app @tag:device-state @tag:app-rule
 export interface DeviceStatus { online: boolean, seen: number | null, app: string | null, todayMs: number | null }
 export interface DeviceWithStatus extends Device { status: DeviceStatus }
-export interface AppTime { packageName: string, title: string, ms: number, byDevice: Record<string, number>, category: NamedCategory | null }
-export interface NewApp { packageName: string, title: string, section: string, installedAt: number, deviceId: string, device: string, guess: string | null }
+export interface AppTime extends AppFace { ms: number, byDevice: Record<string, number>, category: NamedCategory | null }
+export interface NewApp extends AppFace { section: string, installedAt: number, deviceId: string, device: string, guess: string | null }
 export interface AppRule { days: number, limitMinutes: number }
 
 export interface AppsView {
   child: Person
   newApps: NewApp[]
-  categories: Array<NamedCategory & { apps: Array<{ packageName: string, title: string, weekMs: number, rule: AppRule | null, device: string | null }> }>
-  other: Array<{ packageName: string, title: string, weekMs: number, rule: AppRule | null }>
+  categories: Array<NamedCategory & { apps: Array<AppFace & { weekMs: number, rule: AppRule | null, device: string | null }> }>
+  other: Array<AppFace & { weekMs: number, rule: AppRule | null }>
   appUsageProblem: string | null
 }
 
-export interface AppCardView {
-  packageName: string
-  title: string
+export interface AppCardView extends AppFace {
   isNew: boolean
   category: NamedCategory | null
   categories: NamedCategory[]

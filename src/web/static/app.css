@@ -187,6 +187,7 @@ button.deny { color: var(--deny); background: none; }
 .app-row .value { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .app-row.new { border-color: var(--accent); align-items: flex-start; }
 .app-icon { flex: none; width: 32px; height: 32px; border-radius: 9px; background: var(--chip); color: var(--accent); display: inline-flex; align-items: center; justify-content: center; font-weight: 700; vertical-align: middle; }
+img.app-icon { object-fit: cover; background: none; }
 .bar { height: 6px; border-radius: 3px; background: var(--chip); margin-top: 6px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 .tag { display: inline-block; font-size: .7rem; font-weight: 700; text-transform: uppercase; padding: 1px 6px; border-radius: 6px; background: var(--accent); color: var(--accent-text); vertical-align: middle; }
