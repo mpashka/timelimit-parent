@@ -1,4 +1,4 @@
-import type { AddDeviceToken, AppUsageItem, TimelimitApi } from './api.ts'
+import { type AddDeviceToken, APP_ICONS_PER_REQUEST, type AppIconItem, type AppUsageItem, type TimelimitApi } from './api.ts'
 import { ParentConsoleError } from './errors.ts'
 import type { ParentAction, PushActionItem } from './protocol.ts'
 import { createEmptyState, type FamilyState, findParentOfDevice, mergeServerStatus, toClientStatus } from './state.ts'
@@ -131,6 +131,18 @@ export class SyncClient {
   async appUsage (userId: string, fromDay: number, toDay: number): Promise<AppUsageItem[]> {
     const parentId = this.parentUserId(await this.loadCachedState())
     return this.api.getAppUsage({ deviceAuthToken: this.subject.authToken, parentId, userId, fromDay, toDay })
+  }
+
+  /** What the server has of the tablets' names and icons for these packages; the rest it has not received yet. */
+  // @tag:app-icon
+  async appIcons (packageNames: string[]): Promise<AppIconItem[]> {
+    const parentId = this.parentUserId(await this.loadCachedState())
+    const items: AppIconItem[] = []
+    for (let offset = 0; offset < packageNames.length; offset += APP_ICONS_PER_REQUEST) {
+      const chunk = packageNames.slice(offset, offset + APP_ICONS_PER_REQUEST)
+      items.push(...await this.api.getAppIcons({ deviceAuthToken: this.subject.authToken, parentId, packageNames: chunk }))
+    }
+    return items
   }
 
   private async nextSequenceNumber (): Promise<number> {

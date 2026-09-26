@@ -1,3 +1,4 @@
+import { type AppLabels, appTitle } from '../core/apps.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import { childOverview } from '../core/overview.ts'
 import type { ChildRequestAnswerKind, ParentAction } from '../core/protocol.ts'
@@ -11,7 +12,7 @@ import { localTime } from '../shared/time.ts'
 /** The same four durations the console offers: 15m, 30m, 1h, and `day` — until Sleep begins. */
 export const DURATIONS: Record<string, number> = { '15m': 15, '30m': 30, '1h': 60 }
 
-export function requestRows (state: FamilyState, childId: string, now: number) {
+export function requestRows (state: FamilyState, childId: string, now: number, labels: AppLabels) {
   const child = state.users.data.find((user) => user.id === childId)
   if (!child) throw new ParentConsoleError(`no user with id ${childId}`)
   const today = localTime(now, child.timeZone).dayOfEpoch
@@ -23,6 +24,7 @@ export function requestRows (state: FamilyState, childId: string, now: number) {
     .map(({ request, status }) => ({
       id: request.id,
       packageName: request.packageName,
+      title: appTitle(state, request.packageName, labels),
       device: devices.get(request.deviceId) ?? request.deviceId,
       word: request.word,
       createdAt: request.createdAt,

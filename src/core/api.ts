@@ -41,6 +41,11 @@ const unauthorizedHint = 'the device token is unknown to the server: the parent 
 /** One app's total on one day on one device — `POST /parent/get-app-usage`, docs/specification/protocol-new-ui.md §4. */
 export interface AppUsageItem { deviceId: string, day: number, packageName: string, ms: number }
 
+/** A tablet's name and launcher icon of one app, PNG in base64 — `POST /parent/get-app-icons`, docs/specification/protocol-new-ui.md §9. */
+export interface AppIconItem { packageName: string, title: string, icon: string }
+
+export const APP_ICONS_PER_REQUEST = 500
+
 export class TimelimitApi {
   readonly serverUrl: string
   private readonly fetchImpl: typeof fetch
@@ -169,6 +174,21 @@ export class TimelimitApi {
     )
     if (!Array.isArray(answer.items)) {
       throw new ParentConsoleError('/parent/get-app-usage answered without items', 'the sync server predates time per app (apiLevel 12, branch new-ui) — update it')
+    }
+    return answer.items
+  }
+
+  // @tag:app-icon
+  async getAppIcons ({ deviceAuthToken, parentId, packageNames }: {
+    deviceAuthToken: string, parentId: string, packageNames: string[]
+  }): Promise<AppIconItem[]> {
+    const answer = await this.post<{ items: AppIconItem[] }>(
+      '/parent/get-app-icons',
+      { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', packageNames },
+      { 401: unauthorizedHint, 404: 'the sync server predates app icons (apiLevel 14, branch new-ui) — update it' }
+    )
+    if (!Array.isArray(answer.items)) {
+      throw new ParentConsoleError('/parent/get-app-icons answered without items', 'the sync server predates app icons (apiLevel 14, branch new-ui) — update it')
     }
     return answer.items
   }

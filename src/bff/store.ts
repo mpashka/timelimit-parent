@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
 import type { KeyValueStorage } from '../core/session.ts'
 
@@ -33,7 +33,43 @@ const SCHEMA = `
     value TEXT NOT NULL,
     PRIMARY KEY (cookie_id, key)
   );
+  CREATE TABLE IF NOT EXISTS play_apps (
+    package_name TEXT PRIMARY KEY,
+    found INTEGER,
+    title TEXT,
+    icon BLOB,
+    icon_type TEXT,
+    icon_version TEXT,
+    answered_at INTEGER,
+    tried_at INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS tablet_apps (
+    family_id TEXT NOT NULL,
+    package_name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    icon BLOB NOT NULL,
+    icon_version TEXT NOT NULL,
+    PRIMARY KEY (family_id, package_name)
+  );
 `
+
+/**
+ * What Google Play said about a package. `found` is null until Play has answered at all;
+ * `triedAt` moves on every attempt, `answeredAt` only on a definite answer.
+ */
+// @tag:app-icon
+export interface PlayApp {
+  packageName: string
+  found: boolean | null
+  title: string | null
+  iconVersion: string | null
+  answeredAt: number | null
+  triedAt: number
+}
+
+export interface StoredIcon { bytes: Uint8Array, type: string }
+
+const iconVersion = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex').slice(0, 12)
 
 /**
  * The file holds sync-server session tokens, so it is a secret store: create it 0600 and keep it
@@ -98,6 +134,61 @@ export class BffStore {
           .run(cookieId, key, value)
       }
     }
+  }
+
+  // --- названия и значки приложений: Google Play на всех, планшеты — по семье -----------
+
+  findPlayApp (packageName: string): PlayApp | undefined {
+    const row = this.db.prepare('SELECT package_name, found, title, icon_version, answered_at, tried_at FROM play_apps WHERE package_name = ?')
+      .get(packageName) as Record<string, string | number | null> | undefined
+    if (!row) return undefined
+    return {
+      packageName,
+      found: row.found === null ? null : row.found === 1,
+      title: row.title as string | null,
+      iconVersion: row.icon_version as string | null,
+      answeredAt: row.answered_at as number | null,
+      triedAt: row.tried_at as number
+    }
+  }
+
+  /** A definite answer: the app with its title and icon, or `null` — Play has no such app. */
+  savePlayAnswer (packageName: string, answer: { title: string, icon: StoredIcon } | null, at: number): void {
+    this.db.prepare(`
+      INSERT INTO play_apps (package_name, found, title, icon, icon_type, icon_version, answered_at, tried_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (package_name) DO UPDATE SET found = excluded.found, title = excluded.title, icon = excluded.icon, icon_type = excluded.icon_type,
+        icon_version = excluded.icon_version, answered_at = excluded.answered_at, tried_at = excluded.tried_at
+    `).run(packageName, answer === null ? 0 : 1, answer?.title ?? null, answer?.icon.bytes ?? null, answer?.icon.type ?? null,
+      answer === null ? null : iconVersion(answer.icon.bytes), at, at)
+  }
+
+  /** No answer this time (network, 429): an earlier answer stays, only the attempt is recorded. */
+  savePlayFailure (packageName: string, at: number): void {
+    this.db.prepare('INSERT INTO play_apps (package_name, tried_at) VALUES (?, ?) ON CONFLICT (package_name) DO UPDATE SET tried_at = excluded.tried_at')
+      .run(packageName, at)
+  }
+
+  findTabletApp (familyId: string, packageName: string): { title: string, iconVersion: string } | undefined {
+    const row = this.db.prepare('SELECT title, icon_version FROM tablet_apps WHERE family_id = ? AND package_name = ?')
+      .get(familyId, packageName) as { title: string, icon_version: string } | undefined
+    return row && { title: row.title, iconVersion: row.icon_version }
+  }
+
+  saveTabletApp (familyId: string, packageName: string, title: string, png: Uint8Array): void {
+    this.db.prepare(`
+      INSERT INTO tablet_apps (family_id, package_name, title, icon, icon_version) VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (family_id, package_name) DO UPDATE SET title = excluded.title, icon = excluded.icon, icon_version = excluded.icon_version
+    `).run(familyId, packageName, title, png, iconVersion(png))
+  }
+
+  /** The icon the family sees for a package: Google Play's when Play knows the app, the tablet's otherwise. */
+  findIcon (familyId: string, packageName: string): StoredIcon | undefined {
+    const play = this.db.prepare('SELECT icon, icon_type FROM play_apps WHERE package_name = ? AND found = 1')
+      .get(packageName) as { icon: Uint8Array, icon_type: string } | undefined
+    if (play) return { bytes: play.icon, type: play.icon_type }
+    const tablet = this.db.prepare('SELECT icon FROM tablet_apps WHERE family_id = ? AND package_name = ?')
+      .get(familyId, packageName) as { icon: Uint8Array } | undefined
+    return tablet && { bytes: tablet.icon, type: 'image/png' }
   }
 
   close (): void {

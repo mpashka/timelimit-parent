@@ -13,7 +13,7 @@ import {
   allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
-import { ALL_DAYS, type ParentAction } from '../core/protocol.ts'
+import { ALL_DAYS, APP_ICONS_API_LEVEL, type ParentAction } from '../core/protocol.ts'
 import { SyncClient } from '../core/session.ts'
 import { childCategories, parents, type FamilyState } from '../core/state.ts'
 import { formatClock, formatDays, parseClock, parseDays, parseDurationMinutes, parseUntil } from '../shared/time.ts'
@@ -301,12 +301,15 @@ async function main (): Promise<void> {
     case 'request': {
       if (args[0] === 'list') {
         const owner = child(args[1])
-        const rows = requestRows(state, owner.id, now)
+        const packages = [...new Set((owner.requests ?? []).map((request) => request.packageName))]
+        // @tag:app-icon
+        const tabletApps = state.apiLevel >= APP_ICONS_API_LEVEL && packages.length > 0 ? await session.appIcons(packages) : []
+        const rows = requestRows(state, owner.id, now, new Map(tabletApps.map((item) => [item.packageName, { title: item.title }])))
         const outcome = (row: ReturnType<typeof requestRows>[number]) => row.answer === null
           ? row.status
           : `${row.status === 'denied' ? 'denied' : `${row.answer.kind} until ${localDateTime(row.answer.until, owner.timeZone)}`} by ${row.answer.parentName}${row.answer.word ? ` «${row.answer.word}»` : ''}`
         return print(
-          rows.length === 0 ? 'no requests today' : table(['id', 'app', 'tablet', 'asked', 'word', 'state'], rows.map((row) => [row.id, row.packageName, row.device, localDateTime(row.createdAt, owner.timeZone), row.word, outcome(row)])),
+          rows.length === 0 ? 'no requests today' : table(['id', 'app', 'package', 'tablet', 'asked', 'word', 'state'], rows.map((row) => [row.id, row.title, row.packageName, row.device, localDateTime(row.createdAt, owner.timeZone), row.word, outcome(row)])),
           rows
         )
       }

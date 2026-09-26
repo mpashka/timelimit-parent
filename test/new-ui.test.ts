@@ -48,7 +48,7 @@ test('app card: the week sums both tablets per day, a store section guesses the 
     { deviceId: 'devC01', day: toDay - 1, packageName: 'com.game', ms: 1200000 },
     { deviceId: 'devC01', day: toDay, packageName: 'other', ms: 999 }
   ]
-  const card = appCard(state, 'child1', 'com.game', now, usage)
+  const card = appCard(state, 'child1', 'com.game', now, usage, new Map())
   assert.equal(card.todayMs, 900000)
   assert.equal(card.averageMs, Math.round(2100000 / 7))
   assert.equal(card.category?.id, 'games1')
@@ -61,7 +61,7 @@ test('an app moved on one tablet goes as <package>@<device> and shows on the car
   const actions = buildIntent('app-move', { state, now: 0 }, { child: 'child1', package: 'com.game', device: 'devC01', category: 'allow1' })
   assert.deepEqual(actions, [{ type: 'ADD_CATEGORY_APPS', categoryId: 'allow1', packageNames: ['com.game@devC01'] }])
   state.categories.allow1.apps.push('com.game@devC01')
-  const card = appCard(state, 'child1', 'com.game', 0, null)
+  const card = appCard(state, 'child1', 'com.game', 0, null, new Map())
   assert.equal(card.category?.id, 'games1')
   assert.deepEqual(card.devices.map((device) => [device.deviceId, device.category?.id ?? null]), [['devC01', 'allow1'], ['devC02', null]])
 })
@@ -97,7 +97,7 @@ test('CLI: request answer and deny parse into the same answers as the console', 
     [{ type: 'ANSWER_CHILD_REQUEST', requestId: 'rq0001', answer: 'deny', until: 0, word: 'уроки' }])
   assert.throws(() => requestAnswerActions({ state, args: ['answer', 'rq0001', 'app', '2h'], now }), /15m, 30m, 1h, day/)
   assert.throws(() => requestAnswerActions({ state, args: ['answer', 'rq0001', 'all', '1h'], now }), /app or category/)
-  assert.deepEqual(requestRows(state, 'child1', now).map((row) => [row.id, row.status, row.device]), [['rq0001', 'waiting', state.devices.data.find((d) => d.deviceId === 'devC01')?.name]])
+  assert.deepEqual(requestRows(state, 'child1', now, new Map()).map((row) => [row.id, row.status, row.device]), [['rq0001', 'waiting', state.devices.data.find((d) => d.deviceId === 'devC01')?.name]])
 })
 
 // @tag:category-time

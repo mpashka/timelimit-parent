@@ -9,7 +9,10 @@ import { BadRequestError, buildIntent } from './intents.ts'
 import { type BffStore, type StoredSession } from './store.ts'
 import { usageDays } from '../core/apps.ts'
 import { findChild } from '../core/overview.ts'
-import { buildView, needsAppUsage, type ViewContext } from './views.ts'
+import { buildView, needsAppUsage, needsLabels, type ViewContext, visiblePackages } from './views.ts'
+import { type AppLabel, mergeAppLabels } from '../core/apps.ts'
+import { APP_ICONS_API_LEVEL } from '../core/protocol.ts'
+import { iconPath, PlayCatalog } from './app-labels.ts'
 
 // @tag:parent-console
 
@@ -22,6 +25,8 @@ export interface BffOptions {
   /** Tightened interval used while an add-device code is outstanding. */
   fastPollMs?: number
   now?: () => number
+  /** Where Google Play is asked from; without it Play is not asked at all (tests, the mock). */
+  playFetch?: typeof fetch
 }
 
 const COOKIE_NAME = 'tlp.session'
@@ -51,15 +56,17 @@ export class Bff {
   private readonly work = new Map<string, Promise<unknown>>()
   private fastUntil = 0
   private timer: NodeJS.Timeout | undefined
+  private readonly play: PlayCatalog | undefined
   readonly server: Server
 
-  constructor ({ store, api, basePath = '/api', pollMs = DEFAULT_POLL_MS, fastPollMs = DEFAULT_FAST_POLL_MS, now = Date.now }: BffOptions) {
+  constructor ({ store, api, basePath = '/api', pollMs = DEFAULT_POLL_MS, fastPollMs = DEFAULT_FAST_POLL_MS, now = Date.now, playFetch }: BffOptions) {
     this.store = store
     this.api = api
     this.basePath = basePath.replace(/\/+$/, '')
     this.pollMs = pollMs
     this.fastPollMs = fastPollMs
     this.now = now
+    this.play = playFetch && new PlayCatalog({ store, fetchImpl: playFetch, now, onFound: () => this.notifyAll() })
     this.server = createServer((request, response) => {
       this.handle(request, response).catch((error) => this.fail(response, error))
     })
@@ -105,8 +112,9 @@ export class Bff {
     if (path.startsWith('view/')) return this.handleView(path.slice('view/'.length), url, request, response)
     if (path.startsWith('intent/')) return this.handleIntent(path.slice('intent/'.length), url, request, response)
     if (path === 'device/add-token') return this.handleAddDeviceToken(request, response)
+    if (path.startsWith('icon/')) return this.handleIcon(decodeURIComponent(path.slice('icon/'.length)), request, response)
 
-    this.fail(response, new ParentConsoleError(`no such endpoint: ${path}`, 'known: signin/*, signout, events, view/*, intent/*, device/add-token'))
+    this.fail(response, new ParentConsoleError(`no such endpoint: ${path}`, 'known: signin/*, signout, events, view/*, intent/*, device/add-token, icon/<package>'))
   }
 
   // --- вход -------------------------------------------------------------------------------
@@ -175,6 +183,7 @@ export class Bff {
     const { state, staleSince } = await this.stateOf(session)
     const context = this.viewContext(session, state, url, request)
     if (needsAppUsage(name)) context.appUsage = await this.appUsageOf(session, context)
+    if (needsLabels(name)) context.labels = await this.labelsOf(session, context, name)
     const data = buildView(name, context)
     send(response, 200, staleSince === undefined ? { data } : { data, staleSince })
   }
@@ -196,6 +205,7 @@ export class Bff {
     const context = this.viewContext(session, result, url, request)
     if (typeof body.child === 'string') context.childId = body.child
     if (needsAppUsage(view)) context.appUsage = await this.appUsageOf(session, context)
+    if (needsLabels(view)) context.labels = await this.labelsOf(session, context, view)
     send(response, 200, { data: buildView(view, context) })
   }
 
@@ -213,6 +223,53 @@ export class Bff {
       const { failure } = describeFailure(error)
       return { problem: failure.hint ? `${failure.title} — ${failure.hint}` : failure.title }
     }
+  }
+
+  /**
+   * Names and icons of the apps the view may show: Google Play from the cache (and a background
+   * lookup of what is missing or old), the tablets' ones from the cache, asking the sync server only
+   * for packages it has not given yet. Icons are cosmetic — without them the screen shows letters,
+   * so a failure here is logged rather than put on the screen.
+   */
+  // @tag:app-icon
+  private async labelsOf (session: StoredSession, context: ViewContext, view: string): Promise<ViewContext['labels']> {
+    const packages = visiblePackages(context, view)
+    const missing = packages.filter((packageName) => this.store.findTabletApp(session.familyId, packageName) === undefined)
+    if (missing.length > 0 && context.state.apiLevel >= APP_ICONS_API_LEVEL) {
+      try {
+        for (const item of await this.clientFor(session).appIcons(missing)) {
+          this.store.saveTabletApp(session.familyId, item.packageName, item.title, Buffer.from(item.icon, 'base64'))
+        }
+      } catch (error) {
+        const { failure } = describeFailure(error)
+        console.warn(`app icons of family ${session.familyId}: ${failure.title}${failure.hint ? ` — ${failure.hint}` : ''}`)
+      }
+    }
+    this.play?.request(packages)
+    const play = new Map<string, AppLabel>()
+    const tablet = new Map<string, AppLabel>()
+    for (const packageName of packages) {
+      const fromPlay = this.play?.label(packageName)
+      if (fromPlay) play.set(packageName, fromPlay)
+      const fromTablet = this.store.findTabletApp(session.familyId, packageName)
+      if (fromTablet) tablet.set(packageName, { title: fromTablet.title, icon: iconPath(packageName, fromTablet.iconVersion) })
+    }
+    return mergeAppLabels(play, tablet)
+  }
+
+  /** The bytes of an app icon; the address carries its version, so the browser keeps it for a year. */
+  // @tag:app-icon
+  private handleIcon (packageName: string, request: IncomingMessage, response: ServerResponse): void {
+    const session = this.requireSession(request)
+    const icon = this.store.findIcon(session.familyId, packageName)
+    if (!icon) {
+      // an <img> reads no JSON failure; the page falls back to the letter on any error
+      response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' })
+      response.end(`no icon for ${packageName}: neither Google Play nor a tablet has given one`)
+      return
+    }
+    response.writeHead(200, { 'Content-Type': icon.type, 'Content-Length': icon.bytes.byteLength, 'Cache-Control': 'private, max-age=31536000, immutable' })
+    response.end(icon.bytes)
   }
 
   private viewContext (session: StoredSession, state: FamilyState, url: URL, request: IncomingMessage): ViewContext {
@@ -245,6 +302,10 @@ export class Bff {
       clearInterval(beat)
       this.watchers.delete(watcher)
     })
+  }
+
+  private notifyAll (): void {
+    for (const watcher of this.watchers) watcher.response.write('event: changed\ndata: {}\n\n')
   }
 
   private notify (cookieId: string): void {

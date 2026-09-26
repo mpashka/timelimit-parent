@@ -18,10 +18,32 @@ export function usageDays (state: FamilyState, childId: string, now: number): { 
 }
 
 /**
- * The name to show for a package. Titles reach the server only with a new app; the full list is
- * encrypted (docs/requests/web-admin-app-list/), so everything else shows its package name.
+ * A name and an icon of an app from outside the sync status: Google Play or what a tablet reported
+ * (docs/specification/protocol-new-ui.md §9). `icon` is the address the host serves the icon at.
  */
-export function appTitle (state: FamilyState, packageName: string): string {
+// @tag:app-icon
+export interface AppLabel { title?: string, icon?: string }
+export type AppLabels = ReadonlyMap<string, AppLabel>
+
+/** Google Play before the tablet, field by field: an app Play knows takes both its name and its icon from there. */
+export function mergeAppLabels (play: AppLabels, tablet: AppLabels): Map<string, AppLabel> {
+  const merged = new Map<string, AppLabel>()
+  for (const packageName of new Set([...play.keys(), ...tablet.keys()])) {
+    const fromPlay = play.get(packageName)
+    const fromTablet = tablet.get(packageName)
+    merged.set(packageName, { title: fromPlay?.title || fromTablet?.title || undefined, icon: fromPlay?.icon ?? fromTablet?.icon })
+  }
+  return merged
+}
+
+/**
+ * The name to show for a package: from `labels` (Play, then the tablet), then the title a new app
+ * arrived with, and only then the package name — the full app list is encrypted
+ * (docs/requests/web-admin-app-list/).
+ */
+export function appTitle (state: FamilyState, packageName: string, labels: AppLabels): string {
+  const labelled = labels.get(packageName)?.title
+  if (labelled) return labelled
   for (const user of state.users.data) {
     const found = user.newApps?.find((app) => app.packageName === packageName)
     if (found && found.title !== '') return found.title
@@ -58,7 +80,7 @@ export function categoryOfApp (state: FamilyState, childId: string, packageName:
 export interface AppTime { packageName: string, title: string, ms: number, byDevice: Record<string, number>, category: { id: string, title: string } | null }
 
 /** Time per app, summed over the child's tablets and kept per tablet, for the given days, the longest first. */
-export function appTimes (state: FamilyState, childId: string, usage: AppUsageItem[], fromDay: number, toDay: number): AppTime[] {
+export function appTimes (state: FamilyState, childId: string, usage: AppUsageItem[], fromDay: number, toDay: number, labels: AppLabels): AppTime[] {
   const byApp = new Map<string, Record<string, number>>()
   for (const item of usage) {
     if (item.day < fromDay || item.day > toDay || item.ms <= 0) continue
@@ -69,7 +91,7 @@ export function appTimes (state: FamilyState, childId: string, usage: AppUsageIt
   return [...byApp.entries()]
     .map(([packageName, byDevice]) => ({
       packageName,
-      title: appTitle(state, packageName),
+      title: appTitle(state, packageName, labels),
       ms: Object.values(byDevice).reduce((sum, ms) => sum + ms, 0),
       byDevice,
       category: categoryOfApp(state, childId, packageName)
@@ -80,28 +102,29 @@ export function appTimes (state: FamilyState, childId: string, usage: AppUsageIt
 /** The package an app specifier names: `pkg`, `pkg@device` (one tablet) or `pkg:activity`. */
 export const packageOf = (specifier: string): string => specifier.split(/[@:]/)[0]
 
-export function newApps (state: FamilyState, childId: string) {
+export function newApps (state: FamilyState, childId: string, labels: AppLabels) {
   const child = state.users.data.find((user) => user.id === childId)
   const names = new Map(state.devices.data.map((device) => [device.deviceId, device.name]))
   return (child?.newApps ?? []).map((app) => ({
     ...app,
+    title: appTitle(state, app.packageName, labels),
     device: names.get(app.deviceId) ?? '',
     guess: guessCategory(state, childId, app.section)
   }))
 }
 
-export function deviceStatus (state: FamilyState, deviceId: string, now: number, usage: AppUsageItem[] | null, today: number) {
+export function deviceStatus (state: FamilyState, deviceId: string, now: number, usage: AppUsageItem[] | null, today: number, labels: AppLabels) {
   const known = state.deviceStates?.find((item) => item.deviceId === deviceId)
   return {
     online: known !== undefined && now - known.seen < ONLINE_MS,
     seen: known?.seen ?? null,
-    app: known && known.app !== '' ? appTitle(state, known.app) : null,
+    app: known && known.app !== '' ? appTitle(state, known.app, labels) : null,
     todayMs: usage === null ? null : usage.filter((item) => item.deviceId === deviceId && item.day === today).reduce((sum, item) => sum + item.ms, 0)
   }
 }
 
 /** Everything the card of one app shows: the week by day, its category, its own rule, the allowance, per tablet. */
-export function appCard (state: FamilyState, childId: string, packageName: string, now: number, usage: AppUsageItem[] | null) {
+export function appCard (state: FamilyState, childId: string, packageName: string, now: number, usage: AppUsageItem[] | null, labels: AppLabels) {
   const child = state.users.data.find((user) => user.id === childId)
   if (!child) throw new ParentConsoleError(`no user with id ${childId}`)
   const { fromDay, toDay } = usageDays(state, childId, now)
@@ -122,7 +145,7 @@ export function appCard (state: FamilyState, childId: string, packageName: strin
   const allowance = child.appAllowances?.find((item) => item.packageName === packageName && item.until > now) ?? null
   return {
     packageName,
-    title: appTitle(state, packageName),
+    title: appTitle(state, packageName, labels),
     isNew: child.newApps?.some((app) => app.packageName === packageName) ?? false,
     category: categoryOfApp(state, childId, packageName),
     categories: childCategories(state, childId).map((category) => ({ id: category.id, title: category.base.title })),

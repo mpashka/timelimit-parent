@@ -47,7 +47,7 @@ async function main (): Promise<void> {
 
   if (serverEntry) await startSyncServer({ entry: serverEntry, serverUrl })
 
-  const bff = new Bff({ store: openStore(databasePath), api: new TimelimitApi({ serverUrl }) })
+  const bff = new Bff({ store: openStore(databasePath), api: new TimelimitApi({ serverUrl }), playFetch: (input, init) => fetch(input, init) })
   await bff.listen(port, host)
   console.log(`timelimit-bff: ${host}:${port}/api/ -> ${serverUrl}${serverEntry ? ' (sync server in this process)' : ''}, sessions in ${databasePath}`)
 
