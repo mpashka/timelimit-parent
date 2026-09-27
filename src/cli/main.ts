@@ -50,6 +50,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   request deny <id> [--word W]
   category rename <category> <new title>  the parent's own words, any language and emoji
   child add <name> [--time-zone TZ]       a new child with the default categories
+  child remove <name>                     remove the child with its categories, rules and used time
   filter show [child] | filter set [--allow a,b] [--block c,d] | filter off
   export [child] [--out FILE]
   import <file> [--new-child NAME --time-zone TZ] [--replace]
@@ -321,7 +322,8 @@ async function main (): Promise<void> {
       return apply(session, renameCategory({ category: category(need(args[1], 'category')), title: args.slice(2).join(' ') }))
     }
     case 'child': {
-      if (args[0] !== 'add') throw new ParentConsoleError(`unknown child subcommand "${args[0] ?? ''}"`, 'use child add <name> [--time-zone TZ]')
+      if (args[0] === 'remove') return apply(session, [{ type: 'REMOVE_USER', userId: child(need(args[1], 'child name')).id }])
+      if (args[0] !== 'add') throw new ParentConsoleError(`unknown child subcommand "${args[0] ?? ''}"`, 'use child add <name> [--time-zone TZ] | child remove <name>')
       const timeZone = options['time-zone'] ?? state.users.data.find((user) => user.type === 'parent')?.timeZone ?? 'Europe/Belgrade'
       return apply(session, addChild({ name: args.slice(1).join(' '), timeZone }).actions)
     }
