@@ -15,7 +15,8 @@ export const TEMPLATE_FORMAT = 'timelimit-parent/template@1'
 export const ALL_ROOTS = '*'
 
 export interface PortableLimit {
-  days: string
+  /** Every day when left out. */
+  days?: string
   minutes: number
   from?: string
   to?: string
@@ -118,7 +119,7 @@ function limitShapes (limit: PortableLimit): RuleShape[] {
   if (!(limit.minutes > 0)) throw new ParentConsoleError(`limit minutes must be positive, got ${limit.minutes}`)
   if (start > end) throw new ParentConsoleError(`limit window ${limit.from}-${limit.to} must not cross midnight`, 'split it into two limits')
   return [{
-    time: Math.round(limit.minutes * 60000), days: parseDays(limit.days), extraTime: limit.extraTime ?? false, start, end,
+    time: Math.round(limit.minutes * 60000), days: parseDays(limit.days ?? 'mo-su'), extraTime: limit.extraTime ?? false, start, end,
     dur: Math.round((limit.sessionMinutes ?? 0) * 60000), pause: Math.round((limit.pauseMinutes ?? 0) * 60000), perDay: limit.perDay ?? true
   }]
 }
