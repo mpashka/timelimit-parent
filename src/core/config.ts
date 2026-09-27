@@ -336,4 +336,4 @@ const portableBanKey = (ban: PortableBan): string => {
 }
 
 const portableLimitKey = (limit: PortableLimit): string =>
-  `${parseDays(limit.days)} ${limit.from ?? ''} ${limit.to ?? ''} ${limit.sessionMinutes ?? 0}`
+  `${parseDays(limit.days ?? 'mo-su')} ${limit.from ?? ''} ${limit.to ?? ''} ${limit.sessionMinutes ?? 0}`
