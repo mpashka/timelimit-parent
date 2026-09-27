@@ -10,7 +10,7 @@ import { exportChild, overlayConfigs, planImport, type PortableConfig } from '..
 import { ParentConsoleError } from '../core/errors.ts'
 import { DEVICE_FLAGS, findDeviceFlag, isFlagIneffective, NOT_DEVICE_OWNER } from '../shared/device-flags.ts'
 import {
-  allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, setDailyLimit, setUrlFilter, unlockChild
+  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
 import { ALL_DAYS, APP_ICONS_API_LEVEL, type ParentAction } from '../core/protocol.ts'
@@ -49,6 +49,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   request answer <id> app|category <15m|30m|1h|day> [--word W]   allow; day = until Sleep begins
   request deny <id> [--word W]
   category rename <category> <new title>  the parent's own words, any language and emoji
+  child add <name> [--time-zone TZ]       a new child with the default categories
   filter show [child] | filter set [--allow a,b] [--block c,d] | filter off
   export [child] [--out FILE]
   import <file> [--new-child NAME --time-zone TZ] [--replace]
@@ -205,7 +206,7 @@ async function main (): Promise<void> {
       }
       if (args[0] === 'add') {
         const added = await session.createAddDeviceToken()
-        const until = localDateTime(now + TOKEN_LIFETIME_MS, child().timeZone)
+        const until = localDateTime(now + TOKEN_LIFETIME_MS, parents(state)[0]?.timeZone ?? 'UTC')
         return print(
           `code: ${added.token}\nenter it on the new device (setup: connected mode → code from another TimeLimit installation)\nvalid until ${until}; a new code cancels this one`,
           { ...added, validUntil: now + TOKEN_LIFETIME_MS }
@@ -318,6 +319,11 @@ async function main (): Promise<void> {
     case 'category': {
       if (args[0] !== 'rename') throw new ParentConsoleError(`unknown category subcommand "${args[0] ?? ''}"`, 'use category rename <category> <new title>')
       return apply(session, renameCategory({ category: category(need(args[1], 'category')), title: args.slice(2).join(' ') }))
+    }
+    case 'child': {
+      if (args[0] !== 'add') throw new ParentConsoleError(`unknown child subcommand "${args[0] ?? ''}"`, 'use child add <name> [--time-zone TZ]')
+      const timeZone = options['time-zone'] ?? state.users.data.find((user) => user.type === 'parent')?.timeZone ?? 'Europe/Belgrade'
+      return apply(session, addChild({ name: args.slice(1).join(' '), timeZone }).actions)
     }
     case 'app': {
       if (args[0] !== 'move') throw new ParentConsoleError(`unknown app subcommand "${args[0] ?? ''}"`, 'use app move <package> <category|none>')
