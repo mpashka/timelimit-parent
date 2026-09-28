@@ -1,5 +1,5 @@
 import type { AppUsageItem } from '../core/api.ts'
-import { appCard, type AppLabels, appTimes, appTitle, deviceStatus, newApps, packageOf, usageDays } from '../core/apps.ts'
+import { appCard, type AppLabels, appTimes, appTitle, deviceStatus, launchablePackages, newApps, packageOf, usageDays } from '../core/apps.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import { dailyLimitRules } from '../core/operations.ts'
 import { childOverview, findChild, usageHistory } from '../core/overview.ts'
@@ -150,18 +150,22 @@ const viewApps = (context: ViewContext) => {
   const child = context.state.users.data.find((user) => user.id === childId)!
   const week = usage === null ? [] : appTimes(context.state, childId, usage, fromDay, toDay, labelsOf(context))
   const rules = new Map((child.appRules ?? []).map((rule) => [rule.packageName, rule]))
-  const row = (packageName: string) => {
+  const childDevices = context.state.devices.data.filter((device) => device.currentUserId === childId).map((device) => device.deviceId)
+  const launchable = launchablePackages(context.state, childDevices)
+  const row = (packageName: string, service = !launchable.has(packageName)) => {
     const rule = rules.get(packageName)
     return {
       ...appFace(context, packageName),
       weekMs: week.find((item) => item.packageName === packageName)?.ms ?? 0,
-      rule: rule === undefined ? null : { days: rule.days, limitMinutes: rule.limitMinutes }
+      rule: rule === undefined ? null : { days: rule.days, limitMinutes: rule.limitMinutes },
+      service
     }
   }
   const deviceNames = new Map(context.state.devices.data.map((device) => [device.deviceId, device.name]))
   const entry = (specifier: string) => {
     const [packageName, deviceId] = specifier.split('@')
-    return { ...row(packageName), device: deviceId === undefined ? null : deviceNames.get(deviceId) ?? 'удалённый планшет' }
+    if (deviceId === undefined) return { ...row(packageName), device: null }
+    return { ...row(packageName, !launchablePackages(context.state, [deviceId]).has(packageName)), device: deviceNames.get(deviceId) ?? 'удалённый планшет' }
   }
   const assigned = new Set(categories.flatMap((category) => category.apps))
   return {

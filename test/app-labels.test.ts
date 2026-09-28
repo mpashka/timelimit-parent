@@ -1,7 +1,7 @@
 // @tag:app-icon
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { appTitle, mergeAppLabels } from '../src/core/apps.ts'
+import { appTitle, launchablePackages, mergeAppLabels } from '../src/core/apps.ts'
 import { parsePlayPage } from '../src/bff/app-labels.ts'
 import { fixtureState } from './helpers.ts'
 
@@ -31,4 +31,16 @@ test('Play page: the store half of og:title is dropped whatever the dash, the ic
   assert.equal(parsePlayPage(page.replace('–', '-'))?.title, 'Tom & Jerry – Chase')
   assert.equal(parsePlayPage('<meta property="og:title" content="Google Chrome - Apps on Google Play"><meta property="og:image" content="https://x/y">')?.title, 'Google Chrome')
   assert.equal(parsePlayPage('<title>Not Found</title>'), null)
+})
+
+// @tag:app-service
+test('service app: without a home-screen icon on the tablets asked — per tablet, not per family', () => {
+  const state = fixtureState()
+  const app = (packageName: string, isLaunchable: boolean) => ({ packageName, title: packageName, isLaunchable, recommendation: 'none' as const })
+  state.installedApps = {
+    tabA: { version: '1', apps: [app('com.game', true), app('com.miui.wallpaper', false)] },
+    tabB: { version: '1', apps: [app('com.miui.wallpaper', true)] }
+  }
+  assert.deepEqual([...launchablePackages(state, ['tabA'])], ['com.game'])
+  assert.deepEqual([...launchablePackages(state, ['tabA', 'tabB', 'gone'])].sort(), ['com.game', 'com.miui.wallpaper'])
 })

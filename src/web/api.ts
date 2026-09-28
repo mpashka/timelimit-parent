@@ -81,11 +81,14 @@ export interface AppTime extends AppFace { ms: number, byDevice: Record<string, 
 export interface NewApp extends AppFace { section: string, installedAt: number, deviceId: string, device: string, guess: string | null }
 export interface AppRule { days: number, limitMinutes: number }
 
+/** `service` — no icon on the home screen of the child's tablets (the one named in `device`, if any). */
+export interface WeekApp extends AppFace { weekMs: number, rule: AppRule | null, service: boolean }
+
 export interface AppsView {
   child: Person
   newApps: NewApp[]
-  categories: Array<NamedCategory & { apps: Array<AppFace & { weekMs: number, rule: AppRule | null, device: string | null }> }>
-  other: Array<AppFace & { weekMs: number, rule: AppRule | null }>
+  categories: Array<NamedCategory & { apps: Array<WeekApp & { device: string | null }> }>
+  other: WeekApp[]
   appUsageProblem: string | null
 }
 

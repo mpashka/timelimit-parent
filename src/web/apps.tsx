@@ -1,4 +1,4 @@
-import { type AppCardView, type AppFace, type AppRule, type AppsView, type AppTime, apiBase, type NamedCategory, type NewApp } from './api.ts'
+import { type AppCardView, type AppFace, type AppRule, type AppsView, type AppTime, apiBase, type NamedCategory, type NewApp, type WeekApp } from './api.ts'
 import { ALL_DAYS, clockOf, DAY_NAMES, dayLabel, formatDuration, formatUntil } from './format.ts'
 import { useRef, useState } from 'preact/hooks'
 import { ActionButton, useApp, useScreen } from './ui.tsx'
@@ -73,22 +73,29 @@ const matchesApp = (query: string) => {
   }
 }
 
+/** A service app with neither time this week nor a rule of its own says nothing to the parent. */
+// @tag:app-service
+export const quietService = (app: WeekApp): boolean => app.service && app.weekMs === 0 && app.rule === null
+
 export function Apps () {
   const view = useScreen<AppsView>()
   const [query, setQuery] = useState('')
+  const [allService, setAllService] = useState(false)
   const plain = (categories: AppsView['categories']): NamedCategory[] => categories.map(({ id, title }) => ({ id, title }))
-  const matches = matchesApp(query)
   const searching = query.trim() !== ''
+  const found = matchesApp(query)
+  const matches = (app: WeekApp): boolean => found(app) && (allService || searching || !quietService(app))
+  const hidden = [...view.other, ...view.categories.flatMap((category) => category.apps)].filter(quietService).length
   const categories = view.categories.map((category) => ({ ...category, apps: category.apps.filter(matches) }))
     .filter((category) => !searching || category.apps.length > 0)
   const other = view.other.filter(matches)
-  const newApps = view.newApps.filter(matches)
-  const found = newApps.length + other.length + categories.reduce((sum, category) => sum + category.apps.length, 0)
+  const newApps = view.newApps.filter(found)
+  const shown = newApps.length + other.length + categories.reduce((sum, category) => sum + category.apps.length, 0)
   return (
     <>
       <h2 class='section'>Приложения {view.child.name} за неделю</h2>
       <input type='search' class='search' placeholder='Найти приложение' value={query} onInput={(event) => setQuery(event.currentTarget.value)} />
-      {searching && found === 0 ? <p class='muted small'>Ничего не нашлось. <button type='button' class='link' onClick={() => setQuery('')}>Показать все</button></p> : null}
+      {searching && shown === 0 ? <p class='muted small'>Ничего не нашлось. <button type='button' class='link' onClick={() => setQuery('')}>Показать все</button></p> : null}
       {view.appUsageProblem ? <p class='muted small'>Время по приложениям недоступно: {view.appUsageProblem}</p> : null}
       {newApps.map((app) => <NewAppRow key={app.packageName} app={app} categories={plain(view.categories)} />)}
       {categories.map((category) => (
@@ -101,16 +108,20 @@ export function Apps () {
       {other.length > 0
         ? <section class='card'><h2>Вне категорий</h2>{other.map((app) => <WeekRow key={app.packageName} app={app} />)}</section>
         : null}
+      {hidden > 0 && !searching
+        ? <p class='muted small'><button type='button' class='link' onClick={() => setAllService(!allService)}>
+          {allService ? 'Спрятать служебные' : `Показать служебные (${hidden})`}</button> — без значка на рабочем столе планшета, без времени и без своего правила</p>
+        : null}
     </>
   )
 }
 
-function WeekRow ({ app }: { app: AppsView['other'][number] & { device?: string | null } }) {
+function WeekRow ({ app }: { app: WeekApp & { device?: string | null } }) {
   return (
     <a class='app-row' href={appHref(app.packageName)}>
       <AppIcon app={app} />
       <div class='grow'>
-        <div class='name'>{app.title}</div>
+        <div class='name'>{app.title} {app.service ? <span class='tag'>служебное</span> : null}</div>
         {app.device ? <div class='muted small'>только на «{app.device}»</div> : null}
         {app.rule ? <div class='muted small'>{ruleText(app.rule)}</div> : null}
       </div>

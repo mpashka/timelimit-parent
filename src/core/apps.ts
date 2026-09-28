@@ -55,6 +55,18 @@ export function appTitle (state: FamilyState, packageName: string, labels: AppLa
   return packageName
 }
 
+/**
+ * Packages with an icon on the home screen of any of these tablets; the rest are service packages —
+ * mostly the firmware's own, and the list hides them unless they have time.
+ */
+// @tag:app-service
+// ponytail: «no home-screen icon» stands in for «system app» — the sync already carries isLaunchable per
+// tablet; a real FLAG_SYSTEM mark needs a field in the installed-app protocol and a new Android build
+export function launchablePackages (state: FamilyState, deviceIds: Iterable<string>): Set<string> {
+  return new Set([...deviceIds].flatMap((deviceId) =>
+    (state.installedApps[deviceId]?.apps ?? []).filter((app) => app.isLaunchable).map((app) => app.packageName)))
+}
+
 const SECTION_HINTS: Record<string, RegExp> = {
   game: /игр|game/i,
   video: /видео|video|youtube/i,
