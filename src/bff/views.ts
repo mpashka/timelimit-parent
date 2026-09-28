@@ -321,7 +321,7 @@ function viewCategory (categoryId: string, context: ViewContext) {
     title: category.base?.title ?? category.id,
     parentId: category.base?.parentCategoryId || null,
     rules: category.rules,
-    apps: category.apps.map((packageName) => ({ packageName, title: appTitle(context.state, packageName, labelsOf(context)) })),
+    apps: category.apps.map((packageName) => appFace(context, packageName)),
     week: history === null ? [] : history.days.map((day) => ({ day: day.dayOfEpoch, ms: day.byCategory[category.id] ?? 0 }))
   }
 }

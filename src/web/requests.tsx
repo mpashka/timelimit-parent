@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks'
 import type { RequestItem, RequestsView } from './api.ts'
+import { AppIcon } from './apps.tsx'
 import { clockOf, formatDuration, formatUntil } from './format.ts'
 import { ActionButton, useApp } from './ui.tsx'
 
@@ -69,7 +70,7 @@ function RequestCard ({ request, view }: { request: RequestItem, view: RequestsV
 
   return (
     <article class='card request'>
-      <h3>{child.name} просит {request.title}</h3>
+      <h3><AppIcon app={request} /> {child.name} просит {request.title}</h3>
       <div class='muted small'>{clockOf(request.createdAt)} · {request.device}{category ? ` · ${category.title}` : ''}</div>
       {request.word ? <p class='quote'>«{request.word}»</p> : null}
       <dl class='facts'>

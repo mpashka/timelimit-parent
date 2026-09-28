@@ -126,10 +126,8 @@ export interface NowView {
 }
 
 // @tag:child-request
-export interface RequestItem {
+export interface RequestItem extends AppFace {
   id: string
-  packageName: string
-  title: string
   device: string
   word: string
   createdAt: number
@@ -170,7 +168,7 @@ export interface CategoryView {
   id: string
   title: string
   rules: Rule[]
-  apps: Array<{ packageName: string, title: string }>
+  apps: AppFace[]
   week: Array<{ day: number, ms: number }>
 }
 
