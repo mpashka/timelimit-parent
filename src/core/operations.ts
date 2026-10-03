@@ -1,7 +1,7 @@
-import { CATEGORY_TITLE_MAX, categoryTitleProblem } from '../shared/category-title.ts'
+import { LABEL_MAX, labelProblem } from '../shared/label.ts'
 import { ParentConsoleError } from './errors.ts'
 import { generateId } from './ids.ts'
-import { ALL_DAYS, MINUTE_MAX, type ParentAction, type ServerRule, URL_FILTER_API_LEVEL, type UrlFilter } from './protocol.ts'
+import { ALL_DAYS, MINUTE_MAX, type ParentAction, type ServerDevice, type ServerRule, URL_FILTER_API_LEVEL, type UrlFilter } from './protocol.ts'
 import { isWholeDayLimit } from './overview.ts'
 import { type CategoryView, childCategories, type FamilyState, type User } from './state.ts'
 import { localTime } from '../shared/time.ts'
@@ -213,8 +213,16 @@ function requireChild (state: FamilyState, childId: string): User {
 
 // @tag:category-limits
 export function renameCategory ({ category, title }: { category: CategoryView, title: string }): ParentAction[] {
-  const problem = categoryTitleProblem(title)
-  if (problem !== null) throw new ParentConsoleError(`bad category title: ${problem}`, `a title is 1..${CATEGORY_TITLE_MAX} characters, any language and emoji`)
+  const problem = labelProblem(title)
+  if (problem !== null) throw new ParentConsoleError(`bad category title: ${problem}`, `a title is 1..${LABEL_MAX} characters, any language and emoji`)
   const newTitle = title.trim()
   return newTitle === category.base.title ? [] : [{ type: 'UPDATE_CATEGORY_TITLE', categoryId: category.id, newTitle }]
+}
+
+// @tag:parent-console
+export function renameDevice ({ device, name }: { device: ServerDevice, name: string }): ParentAction[] {
+  const problem = labelProblem(name)
+  if (problem !== null) throw new ParentConsoleError(`bad tablet name: ${problem}`, `a name is 1..${LABEL_MAX} characters, any language and emoji`)
+  const newName = name.trim()
+  return newName === device.name ? [] : [{ type: 'UPDATE_DEVICE_NAME', deviceId: device.deviceId, name: newName }]
 }

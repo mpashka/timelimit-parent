@@ -6,7 +6,7 @@ import { answerCategoryId, answerRequest } from '../src/core/requests.ts'
 import { renameCategory } from '../src/core/operations.ts'
 import { requestAnswerActions, requestRows } from '../src/cli/requests.ts'
 import { childCategories } from '../src/core/state.ts'
-import { categoryTitleProblem } from '../src/shared/category-title.ts'
+import { labelProblem } from '../src/shared/label.ts'
 import { appCard, guessCategory, usageDays } from '../src/core/apps.ts'
 import { fixtureState, moscow } from './helpers.ts'
 import { buildIntent } from '../src/bff/intents.ts'
@@ -77,10 +77,18 @@ test('study window on a Saturday evening is Monday morning', () => {
 test('a category title is the parent\'s own text: emoji count as one character, 255 at most, never empty', () => {
   const category = childCategories(fixtureState(), 'child1').find((item) => item.id === 'games1')!
   assert.deepEqual(renameCategory({ category, title: '  Игры 🎮 ' }), [{ type: 'UPDATE_CATEGORY_TITLE', categoryId: 'games1', newTitle: 'Игры 🎮' }])
-  assert.equal(categoryTitleProblem('🎮'.repeat(255)), null)
-  assert.match(categoryTitleProblem('🎮'.repeat(256)) ?? '', /255/)
-  assert.notEqual(categoryTitleProblem('   '), null)
+  assert.equal(labelProblem('🎮'.repeat(255)), null)
+  assert.match(labelProblem('🎮'.repeat(256)) ?? '', /255/)
+  assert.notEqual(labelProblem('   '), null)
   assert.deepEqual(renameCategory({ category, title: category.base.title }), [])
+})
+
+test('a tablet is renamed by its id with the same name check as a category; the same name sends nothing', () => {
+  const state = fixtureState()
+  const context = { state, now: 0 }
+  assert.deepEqual(buildIntent('device-rename', context, { device: 'devC01', name: ' Планшет Тихона ' }), [{ type: 'UPDATE_DEVICE_NAME', deviceId: 'devC01', name: 'Планшет Тихона' }])
+  assert.deepEqual(buildIntent('device-rename', context, { device: 'devC01', name: 'Tablet' }), [])
+  assert.throws(() => buildIntent('device-rename', context, { device: 'devC01', name: '  ' }), /bad tablet name/)
 })
 
 test('CLI: request answer and deny parse into the same answers as the console', () => {

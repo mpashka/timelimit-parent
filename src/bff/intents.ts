@@ -3,7 +3,7 @@ import { addBanActions, type BanSpec, removeBanActions, replaceBanActions } from
 import { ParentConsoleError } from '../core/errors.ts'
 import {
   addChild, allowCategoryUntil, allowChildUntil, blockCategory, grantExtraTime, lockChild,
-  moveApp, renameCategory, revokeExtraTime, setDailyLimit, setUrlFilter, unlockChild
+  moveApp, renameCategory, renameDevice, revokeExtraTime, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice } from '../core/overview.ts'
 import { answerRequest, setAppAllowance } from '../core/requests.ts'
@@ -229,6 +229,13 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
     if (!flag) throw badRequest('flag must be one of the device flags')
     const { deviceId } = findDevice(context.state, str(body, 'device'))
     return [{ type: 'UPDATE_DEVICE_EXPERIMENTAL_FLAGS', deviceId, mask: flag.bit, value: bool(body, 'on') ? flag.bit : 0 }]
+  },
+
+  // @tag:parent-console
+  'device-rename': (context, body) => {
+    const name = body.name
+    if (typeof name !== 'string') throw badRequest('name must be a string')
+    return renameDevice({ device: findDevice(context.state, str(body, 'device')), name })
   },
 
   'child-add': (context, body) => addChild({ name: str(body, 'name'), timeZone: str(body, 'timeZone') }).actions

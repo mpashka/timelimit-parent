@@ -3,7 +3,7 @@ import { AppIcon, appHref } from './apps.tsx'
 import { clockAfter, dayLabel, formatDaysRu, formatDuration } from './format.ts'
 import { formatClock } from '../shared/time.ts'
 import { useState } from 'preact/hooks'
-import { CATEGORY_TITLE_MAX, categoryTitleProblem } from '../shared/category-title.ts'
+import { LABEL_MAX, labelProblem } from '../shared/label.ts'
 import { SubmitButton, useApp, useBusy, useScreen } from './ui.tsx'
 
 // @tag:parent-console @tag:category-limits
@@ -75,7 +75,7 @@ function CategoryTitle ({ category }: { category: CategoryView }) {
       </div>
     )
   }
-  const problem = categoryTitleProblem(draft)
+  const problem = labelProblem(draft)
   const unchanged = draft.trim() === category.title
   return (
     <form class='form' onSubmit={(event) => {
@@ -97,7 +97,7 @@ function CategoryTitle ({ category }: { category: CategoryView }) {
         <input type='text' autoFocus value={draft} onInput={(event) => setDraft(event.currentTarget.value)} />
       </label>
       <div class={problem ? 'error small' : 'muted small'}>
-        {problem ?? `До ${CATEGORY_TITLE_MAX} знаков, любой язык и эмодзи. Название видят и ребёнок на планшете, и вы.`}
+        {problem ?? `До ${LABEL_MAX} знаков, любой язык и эмодзи. Название видят и ребёнок на планшете, и вы.`}
       </div>
       <div class='chips'>
         <SubmitButton phase={phase} disabled={problem !== null || unchanged}>Переименовать</SubmitButton>
