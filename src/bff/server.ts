@@ -2,9 +2,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { TimelimitApi, TOKEN_LIFETIME_MS } from '../core/api.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import { hashParentPassword, PARENT_PASSWORD_MIN_LENGTH } from '../core/password.ts'
-import { type FamilyState, toClientStatus } from '../core/state.ts'
+import { type FamilyState, parents, toClientStatus } from '../core/state.ts'
+import { type AdultRole, isAdultRole, roleAllows, roleOf, ROLE_TITLES } from '../shared/adult-role.ts'
 import { SyncClient } from '../core/session.ts'
-import { describeFailure, SessionGoneError } from './failures.ts'
+import { describeFailure, RefusedError, SessionGoneError } from './failures.ts'
 import { BadRequestError, buildIntent } from './intents.ts'
 import { type BffStore, type StoredSession } from './store.ts'
 import { usageDays } from '../core/apps.ts'
@@ -136,8 +137,9 @@ export class Bff {
       return send(response, 200, { mailAuthToken })
     }
     if (step === 'by-google') {
-      const mailAuthToken = await this.api.signInByGoogle({ idToken: requireString(body, 'idToken'), locale: requireString(body, 'locale') })
-      return send(response, 200, { mailAuthToken })
+      const idToken = requireString(body, 'idToken')
+      const mailAuthToken = await this.api.signInByGoogle({ idToken, locale: requireString(body, 'locale') })
+      return send(response, 200, { mailAuthToken, givenName: givenNameOf(idToken) })
     }
     if (step === 'create-family') {
       const password = requireString(body, 'password')
@@ -214,17 +216,32 @@ export class Bff {
     const body = await readJson(request)
     const result = await this.serial(session.cookieId, async () => {
       const client = this.clientFor(session)
-      // @tag:parent-invitation
-      // приглашение — не действие синхронизации, а отдельная ручка сервера
-      if (name === 'invite-parent') await client.inviteParent(requireString(body, 'mail'))
-      if (name === 'revoke-invitation') await client.revokeParentInvitation(requireString(body, 'mail'))
-      if (name === 'invite-parent' || name === 'revoke-invitation') return client.sync()
       const state = await client.sync()
+      assertRoleAllows(state, session.userId, name, body)
+      // @tag:parent-invitation @tag:adult-role
+      // состав семьи — не действия синхронизации, а отдельные ручки сервера
+      if (name === 'invite-parent') await client.inviteParent(requireString(body, 'mail'), optionalRole(body) ?? 'manager')
+      if (name === 'revoke-invitation') await client.revokeParentInvitation(requireString(body, 'mail'))
+      if (name === 'adult-role') await client.setAdultRole(requireString(body, 'user'), optionalRole(body) ?? badRole())
+      if (name === 'adult-remove') await client.removeAdult(requireString(body, 'user'))
+      if (name === 'family-leave') await client.leaveFamily()
+      if (name === 'family-delete') {
+        if (requireString(body, 'word').trim().toLowerCase() !== DELETE_FAMILY_WORD) throw new BadRequestError(`the confirmation word must be «${DELETE_FAMILY_WORD}»`, `type «${DELETE_FAMILY_WORD}» to delete the family`)
+        await client.deleteFamily(requireString(body, 'mailAuthToken'))
+      }
+      if (SIGNING_OUT_INTENTS.includes(name)) return null
+      if (FAMILY_INTENTS.includes(name)) return client.sync()
       const actions = buildIntent(name, { state, now: this.now() }, body)
       const pushed = await client.push(actions)
       this.remember(session.cookieId, pushed.state)
       return pushed.state
     })
+    if (result === null) {
+      this.store.deleteSession(session.cookieId)
+      this.lastKnown.delete(session.cookieId)
+      response.setHeader('Set-Cookie', cookie(COOKIE_NAME, '', 0))
+      return send(response, 200, { signedOut: true })
+    }
     this.notify(session.cookieId)
     const view = typeof body.view === 'string' ? body.view : undefined
     if (!view) return send(response, 200, { ok: true })
@@ -532,4 +549,53 @@ function readCookie (header: string | undefined, name: string): string | undefin
 
 function cookie (name: string, value: string, maxAgeSeconds = 90 * 24 * 60 * 60): string {
   return `${name}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSeconds}`
+}
+
+// @tag:adult-role
+const DELETE_FAMILY_WORD = 'удалить'
+const SIGNING_OUT_INTENTS = ['family-leave', 'family-delete']
+const FAMILY_INTENTS = ['invite-parent', 'revoke-invitation', 'adult-role', 'adult-remove']
+const ADMIN_INTENTS = [...FAMILY_INTENTS, 'family-delete']
+
+/**
+ * The server refuses a sync action of too low a role only as `shouldDoFullSync`, which names no
+ * reason; asking here first turns that into words. The server stays the authority.
+ */
+// @tag:adult-role
+function neededRole (name: string, body: Record<string, unknown>, userId: string): AdultRole {
+  if (name === 'family-leave') return 'member'
+  if (name === 'adult-rename') return body.user === userId ? 'member' : 'admin'
+  return ADMIN_INTENTS.includes(name) ? 'admin' : 'manager'
+}
+
+function assertRoleAllows (state: FamilyState, userId: string, name: string, body: Record<string, unknown>): void {
+  const role = roleOf(parents(state).find((user) => user.id === userId))
+  const needed = neededRole(name, body, userId)
+  if (!roleAllows(role, needed)) {
+    throw new RefusedError(
+      `your role in the family is «${ROLE_TITLES[role]}», and «${name}» needs «${ROLE_TITLES[needed]}»`,
+      'an admin of the family can change your role on the «Семья» screen'
+    )
+  }
+}
+
+function optionalRole (body: Record<string, unknown>): AdultRole | undefined {
+  if (body.role === undefined) return undefined
+  if (!isAdultRole(body.role)) throw new BadRequestError('role must be admin, manager or member')
+  return body.role
+}
+
+const badRole = (): never => { throw new BadRequestError('role must be admin, manager or member') }
+
+/**
+ * Only a suggestion for the name field, which the person sees and may change; the sync server
+ * verifies the token itself, so reading the claims without checking the signature is enough here.
+ */
+function givenNameOf (idToken: string): string {
+  try {
+    const claims = JSON.parse(Buffer.from(idToken.split('.')[1] ?? '', 'base64url').toString('utf8')) as { given_name?: unknown }
+    return typeof claims.given_name === 'string' ? claims.given_name : ''
+  } catch {
+    return ''
+  }
 }

@@ -10,7 +10,7 @@ import { fullStatus, moscow } from './helpers.ts'
 
 interface Call { path: string, body: any }
 
-function fakeServer ({ unreachable = false } = {}) {
+function fakeServer ({ unreachable = false, role }: { unreachable?: boolean, role?: 'admin' | 'manager' | 'member' } = {}) {
   const calls: Call[] = []
   let broken = unreachable
   const fetchImpl = (async (url: string, init: RequestInit) => {
@@ -20,11 +20,17 @@ function fakeServer ({ unreachable = false } = {}) {
     if (broken) throw new TypeError('fetch failed')
     if (path === '/parent/list-parent-invitations') return Response.json({ invitations: calls.some((c) => c.path === '/parent/invite-parent') ? [{ mail: 'mama@example.com', createdAt: 1 }] : [] })
     if (path === '/session/sign-in' || path === '/session/create-family' || path === '/session/accept-invitation') return Response.json({ sessionToken: 's:' + 'a'.repeat(32), sessionId: 'sess01', familyId: 'fam1', userId: 'parnt1' })
-    if (path === '/sync/pull-status') return Response.json(body.status.users === '' ? fullStatus() : { apiLevel: 11, fullVersion: 1 })
+    if (path === '/sync/pull-status') return Response.json(body.status.users === '' ? withRole(fullStatus(), role) : { apiLevel: 11, fullVersion: 1 })
     if (path === '/sync/push-actions') return Response.json({ shouldDoFullSync: false })
+    if (path === '/auth/sign-in-by-google') return Response.json({ mailAuthToken: 'mail-token' })
     return Response.json({})
   }) as typeof fetch
   return { calls, api: new TimelimitApi({ serverUrl: 'https://server.test', fetchImpl }), break: (value: boolean) => { broken = value } }
+}
+
+function withRole (status: ReturnType<typeof fullStatus>, role: 'admin' | 'manager' | 'member' | undefined) {
+  if (role) status.users!.data.find((user) => user.id === 'parnt1')!.adultRole = role
+  return status
 }
 
 async function startBff (server: ReturnType<typeof fakeServer>) {
@@ -114,6 +120,58 @@ test('accepting an invitation opens a session without a password, inviting answe
   assert.equal(invited.status, 200, JSON.stringify(invited.body))
   assert.deepEqual(invited.body.data.invitations, [{ mail: 'mama@example.com', createdAt: 1 }])
   assert.equal(server.calls.some((c) => c.path === '/sync/push-actions'), false, 'an invitation is no sync action')
+})
+
+// @tag:adult-role
+test('a member is refused in words before the sync server, and may still rename himself', async () => {
+  const server = fakeServer({ role: 'member' })
+  const { bff, call } = await startBff(server)
+  after(() => bff.close())
+  await call('/signin/session', { mailAuthToken: 'mail-token' })
+
+  const refused = await call('/intent/grant', { child: 'child1', category: 'Игры', minutes: 15 })
+  assert.equal(refused.status, 409)
+  assert.match(refused.body.error.title, /Член семьи/)
+  assert.equal(server.calls.some((c) => c.path === '/sync/push-actions'), false)
+
+  const renamed = await call('/intent/adult-rename', { user: 'parnt1', name: 'Папа' })
+  assert.equal(renamed.status, 200, JSON.stringify(renamed.body))
+  const pushed = server.calls.find((c) => c.path === '/sync/push-actions')!
+  assert.deepEqual(JSON.parse(pushed.body.actions[0].encodedAction), { type: 'RENAME_ADULT', userId: 'parnt1', name: 'Папа' })
+})
+
+// @tag:adult-role
+test('leaving the family ends the session of this browser', async () => {
+  const server = fakeServer({ role: 'manager' })
+  const { bff, call } = await startBff(server)
+  after(() => bff.close())
+  await call('/signin/session', { mailAuthToken: 'mail-token' })
+
+  const left = await call('/intent/family-leave', {})
+  assert.deepEqual(left.body, { signedOut: true })
+  assert.ok(server.calls.some((c) => c.path === '/parent/leave-family'))
+  assert.equal((await call('/view/now')).status, 401)
+})
+
+// @tag:adult-role
+test('deleting the family wants the word typed', async () => {
+  const server = fakeServer()
+  const { bff, call } = await startBff(server)
+  after(() => bff.close())
+  await call('/signin/session', { mailAuthToken: 'mail-token' })
+
+  const refused = await call('/intent/family-delete', { word: 'да', mailAuthToken: 'mail-token' })
+  assert.equal(refused.status, 400)
+  assert.equal(server.calls.some((c) => c.path === '/parent/delete-family'), false)
+})
+
+test('Google sign-in suggests the given name from the token', async () => {
+  const server = fakeServer()
+  const { bff, call } = await startBff(server)
+  after(() => bff.close())
+  const claims = Buffer.from(JSON.stringify({ given_name: 'Наталья', email: 'n@example.com' })).toString('base64url')
+  const answer = await call('/signin/by-google', { idToken: `h.${claims}.s`, locale: 'ru' })
+  assert.equal(answer.body.givenName, 'Наталья')
 })
 
 test('no session means session-gone, not a bare 401', async () => {

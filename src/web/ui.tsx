@@ -1,5 +1,6 @@
 import { createContext, type ComponentChildren } from 'preact'
 import { useContext, useEffect, useRef, useState } from 'preact/hooks'
+import type { AdultRole } from '../shared/adult-role.ts'
 import { type FamilyView, type Person, view } from './api.ts'
 import { errorText } from './format.ts'
 
@@ -28,6 +29,8 @@ export interface AppContext {
   pending: { key: string, waiting: boolean } | null
   run: (work: Work) => Promise<boolean>
   showError: (ex: unknown) => void
+  /** A member only looks: the stylesheet hides `.act` and forms under `body.read-only`. @tag:adult-role */
+  role: AdultRole
 }
 
 export const App = createContext<AppContext>(null as unknown as AppContext)
@@ -133,7 +136,7 @@ export function ActionButton ({ work, class: className = '', children, disabled 
   return (
     <button
       type='button'
-      class={`${className} ${mine ? 'pressed' : ''}`}
+      class={`act ${className} ${mine ? 'pressed' : ''}`}
       disabled={disabled || mine}
       aria-busy={waiting}
       onClick={() => start(work)}
@@ -205,7 +208,7 @@ export function Toast ({ toast, close }: { toast: ToastMessage | null, close: ()
  * The one menu of actions on a row — app, category or tablet alike: a visible ⋮, a popup at the
  * button in a browser and a sheet from the bottom on a phone. Any button or link inside closes it.
  */
-export function RowMenu ({ title, subtitle, children }: { title: string, subtitle?: string, children: ComponentChildren }) {
+export function RowMenu ({ title, subtitle, children, class: className = '' }: { title: string, subtitle?: string, children: ComponentChildren, class?: string }) {
   const [open, setOpen] = useState(false)
   useEffect(() => {
     if (!open) return
@@ -214,7 +217,7 @@ export function RowMenu ({ title, subtitle, children }: { title: string, subtitl
     return () => removeEventListener('keydown', onKey)
   }, [open])
   return (
-    <span class='row-menu'>
+    <span class={`row-menu ${className}`}>
       <button type='button' class={`more ${open ? 'on' : ''}`} aria-label={`Действия: ${title}`} aria-expanded={open} onClick={() => setOpen(!open)}>⋮</button>
       {open
         ? (

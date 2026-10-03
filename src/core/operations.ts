@@ -219,6 +219,14 @@ export function renameCategory ({ category, title }: { category: CategoryView, t
   return newTitle === category.base.title ? [] : [{ type: 'UPDATE_CATEGORY_TITLE', categoryId: category.id, newTitle }]
 }
 
+// @tag:adult-role
+export function renameAdult ({ adult, name }: { adult: User, name: string }): ParentAction[] {
+  const problem = labelProblem(name)
+  if (problem !== null) throw new ParentConsoleError(`bad adult name: ${problem}`, `a name is 1..${LABEL_MAX} characters, any language and emoji`)
+  const newName = name.trim()
+  return newName === adult.name ? [] : [{ type: 'RENAME_ADULT', userId: adult.id, name: newName }]
+}
+
 // @tag:parent-console
 export function renameDevice ({ device, name }: { device: ServerDevice, name: string }): ParentAction[] {
   const problem = labelProblem(name)

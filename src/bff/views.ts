@@ -8,6 +8,7 @@ import { NEW_UI_API_LEVEL, PARENT_SESSION_API_LEVEL, URL_FILTER_API_LEVEL } from
 import { answerCategoryId, requestStatus } from '../core/requests.ts'
 import { defaultScheduleCategories } from '../core/schedules.ts'
 import { childCategories, children, type FamilyState, parents } from '../core/state.ts'
+import { roleOf } from '../shared/adult-role.ts'
 import { dayEnd, scheduleKind } from '../shared/schedules.ts'
 import { localTime, timestampAt } from '../shared/time.ts'
 
@@ -313,7 +314,7 @@ const viewFamily = (context: ViewContext) => ({
 
 // @tag:parent-invitation
 const viewParents = (context: ViewContext) => ({
-  parents: parents(context.state).map(({ id, name, mail }) => ({ id, name, mail })),
+  parents: parents(context.state).map((adult) => ({ id: adult.id, name: adult.name, mail: adult.mail, role: roleOf(adult) })),
   signedInUserId: context.signedInUserId,
   invitations: context.invitations && 'items' in context.invitations ? context.invitations.items : [],
   invitationsProblem: context.invitations && 'problem' in context.invitations ? context.invitations.problem : null

@@ -1,3 +1,4 @@
+import type { AdultRole } from '../shared/adult-role.ts'
 import type { ScheduleKind } from '../shared/schedules.ts'
 import { type BanSpec, BffError, type Failure, type Loophole } from './format.ts'
 
@@ -16,6 +17,7 @@ export interface Person {
   mail: string
   timeZone: string
   disableLimitsUntil: number
+  adultRole?: AdultRole // @tag:adult-role
 }
 
 export interface Device {
@@ -196,22 +198,25 @@ export interface MailStatus {
   status: 'with family' | 'without family'
   mail: string
   canCreateFamily: boolean
-  invitation?: { inviterName: string, inviterMail: string } | null // @tag:parent-invitation
+  invitation?: { inviterName: string, inviterMail: string, role?: AdultRole } | null // @tag:parent-invitation
+  ownFamily?: { children: number, devices: number, adults: number } | null // @tag:adult-role
 }
 
-// @tag:parent-invitation
+// @tag:parent-invitation @tag:adult-role
 export interface ParentsView {
-  parents: Array<{ id: string, name: string, mail: string }>
+  parents: Array<{ id: string, name: string, mail: string, role: AdultRole }>
   signedInUserId: string
-  invitations: Array<{ mail: string, createdAt: number }>
+  invitations: Array<{ mail: string, createdAt: number, role?: AdultRole }>
   invitationsProblem: string | null
 }
 
 export interface WebConfig { googleClientId?: string, apiUrl?: string }
 
 let apiUrl = ''
+let googleClientId: string | undefined
 
 export const apiBase = (): string => apiUrl
+export const googleClientIdOf = (): string | undefined => googleClientId
 
 export async function loadWebConfig (): Promise<WebConfig> {
   let config: WebConfig = {}
@@ -222,6 +227,7 @@ export async function loadWebConfig (): Promise<WebConfig> {
     config = {}
   }
   apiUrl = (config.apiUrl ?? location.origin + '/api').replace(/\/+$/, '')
+  googleClientId = config.googleClientId
   return config
 }
 
@@ -261,13 +267,13 @@ export const view = <T>(name: string, childId?: string): Promise<ViewAnswer<T>> 
   call<ViewAnswer<T>>(`/view/${name}${childId ? `?child=${encodeURIComponent(childId)}` : ''}`)
 
 /** Answers with the fresh view of `body.view`, so a pressed button needs no second request. */
-export const intent = <T>(name: string, body: Record<string, unknown>): Promise<{ data?: T }> =>
-  call<{ data?: T }>(`/intent/${name}`, body)
+export const intent = <T>(name: string, body: Record<string, unknown>): Promise<{ data?: T, signedOut?: true }> =>
+  call<{ data?: T, signedOut?: true }>(`/intent/${name}`, body)
 
 export const signIn = {
   mailCode: (mail: string) => call<{ mailLoginToken: string }>('/signin/mail-code', { mail, locale: 'ru' }),
   byMailCode: (mailLoginToken: string, receivedCode: string) => call<{ mailAuthToken: string }>('/signin/by-mail-code', { mailLoginToken, receivedCode }),
-  byGoogle: (idToken: string) => call<{ mailAuthToken: string }>('/signin/by-google', { idToken, locale: 'ru' }),
+  byGoogle: (idToken: string) => call<{ mailAuthToken: string, givenName?: string }>('/signin/by-google', { idToken, locale: 'ru' }),
   mailStatus: (mailAuthToken: string) => call<MailStatus>('/signin/mail-status', { mailAuthToken }),
   session: (mailAuthToken: string) => call<{ userId: string }>('/signin/session', { mailAuthToken }),
   createFamily: (form: { mailAuthToken: string, password: string, parentName: string, timeZone: string }) =>

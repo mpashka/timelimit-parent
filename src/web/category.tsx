@@ -71,7 +71,7 @@ function CategoryTitle ({ category }: { category: CategoryView }) {
     return (
       <div class='row'>
         <h2>{category.title}</h2>
-        <button type='button' class='link' onClick={() => setDraft(category.title)}>Изменить название</button>
+        <button type='button' class='link act' onClick={() => setDraft(category.title)}>Изменить название</button>
       </div>
     )
   }

@@ -1,5 +1,6 @@
 import { ApiError, ParentConsoleError } from './errors.ts'
 import type { ParentPassword } from './password.ts'
+import type { AdultRole } from '../shared/adult-role.ts'
 import type { ClientDataStatus, PushActionItem, ServerDataStatus } from './protocol.ts'
 
 // @tag:parent-console
@@ -26,13 +27,18 @@ export interface MailStatus {
   alwaysPro: boolean
   /** Who invited this address into a family; absent on a server without invitations. @tag:parent-invitation */
   invitation?: ReceivedInvitation | null
+  /** The invited address's own family, given only with an invitation. @tag:adult-role */
+  ownFamily?: OwnFamily | null
 }
 
 // @tag:parent-invitation
-export interface ReceivedInvitation { inviterName: string, inviterMail: string }
+export interface ReceivedInvitation { inviterName: string, inviterMail: string, role?: AdultRole }
+
+// @tag:adult-role
+export interface OwnFamily { children: number, devices: number, adults: number }
 
 // @tag:parent-invitation
-export interface ParentInvitation { mail: string, createdAt: number }
+export interface ParentInvitation { mail: string, createdAt: number, role?: AdultRole }
 
 export interface AddDeviceToken {
   token: string
@@ -43,6 +49,13 @@ export interface AddDeviceToken {
 export const TOKEN_LIFETIME_MS = 3 * 60 * 60 * 1000
 
 type StatusHints = Record<number, string>
+
+// @tag:adult-role
+const ADULT_ROLE_HINTS: StatusHints = {
+  404: 'this server has no adult roles (needs the new-ui server branch from tim-136)',
+  403: 'your adult role does not allow this — an admin of the family can',
+  409: 'a family always keeps one admin: make another adult an admin first, or delete the family'
+}
 
 const unauthorizedHint = 'the device token is unknown to the server: the parent device was removed or the token is wrong — run `login` again'
 
@@ -164,7 +177,7 @@ export class TimelimitApi {
       { mailAuthToken, parentName, timeZone, ...(password ? { parentPassword: password } : {}) },
       {
         404: 'this server has no parent invitations (needs the new-ui server branch from tim-136)',
-        409: 'the invitation is gone: the parent who sent it revoked it, or it was already used',
+        409: 'the invitation is gone (revoked or already used), or your own family is not empty — delete it or leave it first in your own web console',
         401: 'mail authentication expired or was already used — log in again'
       }
     )
@@ -176,14 +189,38 @@ export class TimelimitApi {
   }
 
   // @tag:parent-invitation
-  async inviteParent ({ deviceAuthToken, parentId, mail }: { deviceAuthToken: string, parentId: string, mail: string }): Promise<ParentInvitation> {
+  async inviteParent ({ deviceAuthToken, parentId, mail, role }: { deviceAuthToken: string, parentId: string, mail: string, role: AdultRole }): Promise<ParentInvitation> {
     return this.post<ParentInvitation>(
-      '/parent/invite-parent', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', mail },
+      '/parent/invite-parent', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', mail, role },
       {
         404: 'this server has no parent invitations (needs the new-ui server branch from tim-136)',
-        409: 'a mail address can belong to one family only — ask the person for another address'
+        409: 'this address is already an adult of this family or is invited into another one'
       }
     )
+  }
+
+  // @tag:adult-role
+  async setAdultRole ({ deviceAuthToken, parentId, userId, role }: { deviceAuthToken: string, parentId: string, userId: string, role: AdultRole }): Promise<void> {
+    await this.post('/parent/set-adult-role', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', userId, role }, ADULT_ROLE_HINTS)
+  }
+
+  // @tag:adult-role
+  async removeAdult ({ deviceAuthToken, parentId, userId }: { deviceAuthToken: string, parentId: string, userId: string }): Promise<void> {
+    await this.post('/parent/remove-adult', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', userId }, ADULT_ROLE_HINTS)
+  }
+
+  // @tag:adult-role
+  async leaveFamily ({ deviceAuthToken, parentId }: { deviceAuthToken: string, parentId: string }): Promise<void> {
+    await this.post('/parent/leave-family', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device' }, ADULT_ROLE_HINTS)
+  }
+
+  /** `mailAuthToken` must confirm the caller's own address and is spent; every adult with a mail gets a letter. */
+  // @tag:adult-role
+  async deleteFamily ({ deviceAuthToken, parentId, mailAuthToken }: { deviceAuthToken: string, parentId: string, mailAuthToken: string }): Promise<void> {
+    await this.post('/parent/delete-family', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', mailAuthToken }, {
+      ...ADULT_ROLE_HINTS,
+      401: 'the mail confirmation expired or was already used — confirm your mail again'
+    })
   }
 
   // @tag:parent-invitation

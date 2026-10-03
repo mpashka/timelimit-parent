@@ -23,7 +23,7 @@ export function DeviceLine ({ device }: { device: DeviceWithStatus }) {
       <i class={device.status.online ? 'dot on' : 'dot'} aria-hidden='true' />
       <div class='grow'>{device.name}<div class='muted small'>{statusText(device)}</div></div>
       {device.status.todayMs !== null ? <b>{formatDuration(device.status.todayMs)}</b> : null}
-      <RowMenu title={device.name} subtitle={statusText(device)}>
+      <RowMenu class='act' title={device.name} subtitle={statusText(device)}>
         <button type='button' class='item' onClick={() => setDraft(device.name)}>Переименовать</button>
       </RowMenu>
     </li>
@@ -116,7 +116,7 @@ export function Devices () {
           </section>
           )
         : null}
-      <button type='button' class={view.devices.length === 0 ? 'primary wide' : 'wide'} onClick={() => { location.hash = '#/device' }}>Подключить планшет</button>
+      <button type='button' class={`act ${view.devices.length === 0 ? 'primary wide' : 'wide'}`} onClick={() => { location.hash = '#/device' }}>Подключить планшет</button>
     </>
   )
 }

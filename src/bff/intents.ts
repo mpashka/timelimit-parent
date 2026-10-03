@@ -3,13 +3,13 @@ import { addBanActions, type BanSpec, removeBanActions, replaceBanActions } from
 import { ParentConsoleError } from '../core/errors.ts'
 import {
   addChild, allowCategoryUntil, allowChildUntil, blockCategory, grantExtraTime, lockChild,
-  moveApp, renameCategory, renameDevice, revokeExtraTime, setDailyLimit, setUrlFilter, unlockChild
+  moveApp, renameAdult, renameCategory, renameDevice, revokeExtraTime, setDailyLimit, setUrlFilter, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice } from '../core/overview.ts'
 import { answerRequest, setAppAllowance } from '../core/requests.ts'
 import { ALL_DAYS, type ParentAction, type UrlFilter } from '../core/protocol.ts'
 import { type ScheduleBan, setScheduleActions } from '../core/schedules.ts'
-import { childCategories, type FamilyState } from '../core/state.ts'
+import { childCategories, type FamilyState, parents } from '../core/state.ts'
 import { findDeviceFlag } from '../shared/device-flags.ts'
 import { SCHEDULE_KINDS, type ScheduleKind } from '../shared/schedules.ts'
 
@@ -236,6 +236,16 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
     const name = body.name
     if (typeof name !== 'string') throw badRequest('name must be a string')
     return renameDevice({ device: findDevice(context.state, str(body, 'device')), name })
+  },
+
+  // @tag:adult-role
+  'adult-rename': (context, body) => {
+    const name = body.name
+    if (typeof name !== 'string') throw badRequest('name must be a string')
+    const userId = str(body, 'user')
+    const adult = parents(context.state).find((user) => user.id === userId)
+    if (!adult) throw new ParentConsoleError(`no adult ${userId} in the family`, 'reload the screen')
+    return renameAdult({ adult, name })
   },
 
   'child-add': (context, body) => addChild({ name: str(body, 'name'), timeZone: str(body, 'timeZone') }).actions

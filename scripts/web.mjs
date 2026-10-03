@@ -106,7 +106,10 @@ function mockApi (fullStatus, path, body) {
   kid.newApps = [{ packageName: 'com.robtopx.geometryjump', title: 'Geometry Dash', section: 'game', installedAt: Date.now() - 75 * 60000, deviceId: 'devC01' }]
   fixture.deviceStates = [{ deviceId: 'devC01', seen: Date.now() - 20000, app: 'com.game', appSince: Date.now() - 600000 }]
   if (mockFamilyWithoutChild) hideChildren(fixture)
+  // @tag:adult-role
+  fixture.users.data.find((u) => u.id === 'parnt1').adultRole = process.env.TIMELIMIT_MOCK_ROLE ?? 'admin'
   switch (path) {
+    case '/parent/list-parent-invitations': return { invitations: [{ mail: 'grandma@example.com', createdAt: Date.now(), role: 'member' }] }
     case '/auth/send-mail-login-code-v2': return { mailLoginToken: 'mock' }
     case '/auth/sign-in-by-mail-code':
       if (body.receivedCode === '000') return [403, 'wrong code']

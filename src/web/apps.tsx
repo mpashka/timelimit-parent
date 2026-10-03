@@ -188,7 +188,7 @@ export function AppCard () {
                 <summary aria-label='Ещё'>⋯</summary>
                 <div class='card'>
                   {view.devices.map((device) => (
-                    <button type='button' class='link' key={device.deviceId} onClick={() => editOnDevice(device.deviceId)}>Своя категория на «{device.name}»</button>
+                    <button type='button' class='link act' key={device.deviceId} onClick={() => editOnDevice(device.deviceId)}>Своя категория на «{device.name}»</button>
                   ))}
                 </div>
               </details>

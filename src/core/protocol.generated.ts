@@ -207,6 +207,12 @@ export interface SerializedRemoveUserAction {
   authentication?: string
 }
 
+export interface SerializedRenameAdultAction {
+  type: 'RENAME_ADULT'
+  userId: string
+  name: string
+}
+
 export interface SerializedRenameChildAction {
   type: 'RENAME_CHILD'
   childId: string
@@ -712,6 +718,7 @@ export interface ServerUserEntry {
   llc?: string
   pbd?: number
   urlFilter?: UrlFilter
+  adultRole?: 'admin' | 'manager' | 'member'
   requests?: Array<ServerChildRequest>
   appAllowances?: Array<ServerAppAllowance>
   appRules?: Array<ServerAppRule>
@@ -791,6 +798,7 @@ export type SerializedParentAction =
   | SerializedRemoveCategoryAppsAction
   | SerializedRemoveParentU2fKeyAction
   | SerializedRemoveUserAction
+  | SerializedRenameAdultAction
   | SerializedRenameChildAction
   | SerializeResetCategoryNetworkIdsAction
   | SerializedReviewChildTaskAction

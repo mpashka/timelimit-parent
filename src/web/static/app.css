@@ -311,3 +311,10 @@ button.more.on { color: var(--accent); }
 .category-apps .line-main { min-height: 44px; }
 .category-apps .app-icon { width: 26px; height: 26px; font-size: .8rem; }
 .plain li > .app-icon, .request h3 > .app-icon { width: 24px; height: 24px; font-size: .75rem; margin-right: 6px; }
+
+/* @tag:adult-role — a member only looks: no action buttons, no forms, switches show state only */
+body.read-only .act:not(.own), body.read-only main form:not(.own), body.read-only .panel form { display: none; }
+body.read-only .switch, body.read-only .check { pointer-events: none; }
+body.read-only .switch input, body.read-only .check input { opacity: .6; }
+fieldset.roles { border: none; padding: 0; margin: 8px 0; display: grid; gap: 2px; }
+button.danger { background: var(--danger, #c62828); border-color: var(--danger, #c62828); color: #fff; }

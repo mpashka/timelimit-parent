@@ -5,7 +5,8 @@ import { Bans } from './bans.tsx'
 import { clockOf, errorText } from './format.ts'
 import { AppCard, Apps } from './apps.tsx'
 import { Devices } from './devices.tsx'
-import { Parents } from './parents.tsx'
+import { DeleteFamily, Parents } from './parents.tsx'
+import { roleOf } from '../shared/adult-role.ts'
 import { Requests } from './requests.tsx'
 import { Home } from './home.tsx'
 import { CategoryDetails } from './category.tsx'
@@ -30,7 +31,7 @@ const tabs = [
   { path: 'tablets', title: 'Планшеты', also: ['device'] }
 ]
 
-const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', sites: 'sites', apps: 'apps', tablets: 'devices', device: null, parents: 'parents' }
+const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', sites: 'sites', apps: 'apps', tablets: 'devices', device: null, parents: 'parents', 'family-delete': 'parents' }
 
 const currentRoute = () => location.hash.replace(/^#\/?/, '')
 
@@ -116,7 +117,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   const toastId = useRef(0)
 
   const [requested, argument] = route.split('/')
-  const screen = ['bans', 'sites', 'category', 'device', 'apps', 'app', 'tablets', 'parents'].includes(requested) ? requested : ''
+  const screen = ['bans', 'sites', 'category', 'device', 'apps', 'app', 'tablets', 'parents', 'family-delete'].includes(requested) ? requested : ''
   const kids = family.children
   const child = kids.find((kid) => kid.id === childId) ?? kids[0]
   const viewName = child === undefined ? null : screen === 'category' ? `category/${argument ?? ''}` : screen === 'app' ? `app/${argument ?? ''}` : screenViews[screen] ?? null
@@ -130,6 +131,9 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   }, [])
   useEffect(() => { setNow(Date.now()) }, [revision])
   useEffect(() => { setToast((current) => current?.kind === 'done' ? null : current) }, [route])
+  const parent = family.parents.find((person) => person.id === family.signedInUserId)
+  const role = roleOf(parent)
+  useEffect(() => { document.body.classList.toggle('read-only', role === 'member') }, [role])
 
   const showError = (ex: unknown) => {
     const text = errorText(ex)
@@ -152,6 +156,11 @@ function Console ({ family, familyStale, revision, reload, leave }: {
     const timer = setTimeout(() => setPending({ key: work.key, waiting: true }), WAIT_INDICATOR_DELAY_MS)
     try {
       const answer = await intent(work.intent, { child: child?.id, ...work.body, ...(viewName === null ? {} : { view: viewName }) })
+      if (answer.signedOut) {
+        location.hash = '#/'
+        void leave()
+        return true
+      }
       if (answer.data === undefined) reload()
       else screenView.set(answer.data)
       setPanelRevision((value) => value + 1)
@@ -177,8 +186,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
     )
   }
 
-  const context: AppContext = { family, child, now, view: screenView.data, pending, run, showError }
-  const parent = family.parents.find((person) => person.id === family.signedInUserId)
+  const context: AppContext = { family, child, now, view: screenView.data, pending, run, showError, role }
   const stale = screenView.staleSince ?? familyStale
   const askToLeave = () => {
     if (confirm('Выйти из веб-админки? Для входа снова понадобится Google-аккаунт или код из письма.')) void leave()
@@ -200,7 +208,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
               )
             : <h1>{child.name}</h1>}
         </div>
-        <ParentCode />
+        {role === 'member' ? null : <ParentCode />}
         <button type='button' class={`bell ${bellOpen ? 'open' : ''}`} aria-expanded={bellOpen} onClick={() => (bellOpen ? closeBell() : openBell())}
           aria-label={waiting > 0 ? `Просьбы: ${waiting} ждёт ответа` : 'Просьбы'}>
           <svg viewBox='0 0 24 24' aria-hidden='true'><path d='M12 3a6 6 0 0 0-6 6v4l-2 3h16l-2-3V9a6 6 0 0 0-6-6zm-2 15a2 2 0 0 0 4 0' /></svg>
@@ -210,7 +218,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
           <summary aria-label='Аккаунт'>⋯</summary>
           <div class='card'>
             <Account parent={parent} serverUrl={family.serverUrl} />
-            <a href='#/parents' onClick={(event) => event.currentTarget.closest('details')?.removeAttribute('open')}>Семья — родители</a>
+            <a href='#/parents' onClick={(event) => event.currentTarget.closest('details')?.removeAttribute('open')}>Семья</a>
             <button type='button' class='link' onClick={askToLeave}>Выйти</button>
           </div>
         </details>
@@ -236,6 +244,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
               {screen === 'category' ? <CategoryDetails /> : null}
               {screen === 'device' ? <AddDevice serverUrl={family.serverUrl} /> : null}
               {screen === 'parents' ? <Parents /> : null}
+              {screen === 'family-delete' ? <DeleteFamily /> : null}
             </>
             )}
       </main>

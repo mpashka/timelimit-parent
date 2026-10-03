@@ -45,15 +45,24 @@ export class SessionGoneError extends ParentConsoleError {
   }
 }
 
+/** The person may not do this — their role, or a rule of the family; reloading will not help. */
+export class RefusedError extends ParentConsoleError {
+  constructor (message: string, hint: string) {
+    super(message, hint)
+    this.name = 'RefusedError'
+  }
+}
+
 function kindOf (error: unknown): FailureKind {
   if (error instanceof BadRequestError) return 'bad-request'
+  if (error instanceof RefusedError) return 'sync-rejected'
   if (error instanceof SessionGoneError) return 'session-gone'
   if (error instanceof ApiError) {
     if (error.status === 401) {
       return MAIL_AUTH_ENDPOINTS.some((prefix) => error.endpoint.startsWith(prefix)) ? 'mail-auth-expired' : 'session-gone'
     }
     if (error.status === 404 || error.status === 501) return 'not-supported'
-    if (error.status === 409) return 'sync-rejected'
+    if (error.status === 409 || error.status === 403) return 'sync-rejected'
     return 'internal'
   }
   if (error instanceof ParentConsoleError) {

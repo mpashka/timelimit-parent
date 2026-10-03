@@ -1,4 +1,5 @@
 import { type AddDeviceToken, APP_ICONS_PER_REQUEST, type AppIconItem, type AppUsageItem, type LaunchableAppItem, type ParentInvitation, type TimelimitApi } from './api.ts'
+import type { AdultRole } from '../shared/adult-role.ts'
 import { ParentConsoleError } from './errors.ts'
 import type { ParentAction, PushActionItem } from './protocol.ts'
 import { createEmptyState, type FamilyState, findParentOfDevice, mergeServerStatus, toClientStatus } from './state.ts'
@@ -121,9 +122,34 @@ export class SyncClient {
   }
 
   // @tag:parent-invitation
-  async inviteParent (mail: string): Promise<ParentInvitation> {
+  async inviteParent (mail: string, role: AdultRole): Promise<ParentInvitation> {
     const parentId = this.parentUserId(await this.sync())
-    return this.api.inviteParent({ deviceAuthToken: this.subject.authToken, parentId, mail })
+    return this.api.inviteParent({ deviceAuthToken: this.subject.authToken, parentId, mail, role })
+  }
+
+  // @tag:adult-role
+  async setAdultRole (userId: string, role: AdultRole): Promise<void> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.setAdultRole({ deviceAuthToken: this.subject.authToken, parentId, userId, role })
+  }
+
+  // @tag:adult-role
+  async removeAdult (userId: string): Promise<void> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.removeAdult({ deviceAuthToken: this.subject.authToken, parentId, userId })
+  }
+
+  /** Ends every session of this adult, this one included. */
+  // @tag:adult-role
+  async leaveFamily (): Promise<void> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.leaveFamily({ deviceAuthToken: this.subject.authToken, parentId })
+  }
+
+  // @tag:adult-role
+  async deleteFamily (mailAuthToken: string): Promise<void> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.deleteFamily({ deviceAuthToken: this.subject.authToken, parentId, mailAuthToken })
   }
 
   // @tag:parent-invitation

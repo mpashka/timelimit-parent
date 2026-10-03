@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
-import { apiBase, signIn } from './api.ts'
+import { ROLE_DESCRIPTIONS, ROLE_TITLES } from '../shared/adult-role.ts'
+import { apiBase, type MailStatus, signIn } from './api.ts'
 import { errorText, type ErrorText } from './format.ts'
 import { browserTimeZone, ErrorBox, PasswordField } from './setup.tsx'
 import { serverLabel, SubmitButton, useBusy } from './ui.tsx'
@@ -23,7 +24,7 @@ type Step =
   | { name: 'mail' }
   | { name: 'code', mail: string, mailLoginToken: string }
   | { name: 'create', mailAuthToken: string, mail: string }
-  | { name: 'invited', mailAuthToken: string, mail: string, inviterName: string, inviterMail: string, canCreateFamily: boolean }
+  | { name: 'invited', mailAuthToken: string, mail: string, invitation: NonNullable<MailStatus['invitation']>, ownFamily: MailStatus['ownFamily'], canCreateFamily: boolean }
   | { name: 'closed', mail: string }
 
 export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: string, onSignedIn: () => void }) {
@@ -40,15 +41,19 @@ export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: strin
    * that repeats the word the person has already pressed. A mail without a family goes to family
    * creation, so a new parent never meets "no family uses this mail".
    */
-  const afterMailAuth = async (mailAuthToken: string) => {
+  // @tag:parent-invitation @tag:adult-role
+  const afterMailAuth = async (mailAuthToken: string, givenName = '') => {
     const status = await signIn.mailStatus(mailAuthToken)
-    if (status.status === 'with family') {
+    if (status.invitation) {
+      setParentName(givenName)
+      setStep({ name: 'invited', mailAuthToken, mail: status.mail, invitation: status.invitation, ownFamily: status.ownFamily, canCreateFamily: status.canCreateFamily })
+    } else if (status.status === 'with family') {
       await signIn.session(mailAuthToken)
       onSignedIn()
-    } else if (status.invitation) {
-      setParentName(status.mail.split('@')[0])
-      setStep({ name: 'invited', mailAuthToken, mail: status.mail, ...status.invitation, canCreateFamily: status.canCreateFamily })
-    } else if (status.canCreateFamily) setStep({ name: 'create', mailAuthToken, mail: status.mail })
+    } else if (status.canCreateFamily) {
+      setParentName(givenName)
+      setStep({ name: 'create', mailAuthToken, mail: status.mail })
+    }
     else setStep({ name: 'closed', mail: status.mail })
   }
 
@@ -77,8 +82,8 @@ export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: strin
     setError(null)
     void wrap(async () => {
       try {
-        const { mailAuthToken } = await signIn.byGoogle(idToken)
-        await afterMailAuth(mailAuthToken)
+        const { mailAuthToken, givenName } = await signIn.byGoogle(idToken)
+        await afterMailAuth(mailAuthToken, givenName)
       } catch (ex) {
         failed(ex)
       }
@@ -140,30 +145,7 @@ export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: strin
           </form>
           )
         : null}
-      {step.name === 'invited'
-        ? (
-          <form onSubmit={attempt(async () => {
-            await signIn.acceptInvitation({
-              mailAuthToken: step.mailAuthToken,
-              password,
-              parentName: parentName.trim(),
-              timeZone: browserTimeZone()
-            })
-            onSignedIn()
-          })}>
-            <p><b>{step.inviterName || step.inviterMail}</b>{step.inviterName && step.inviterMail ? ` (${step.inviterMail})` : ''} приглашает вас в свою семью вторым родителем — с теми же правами.</p>
-            <label>Ваше имя
-              <input required maxLength={50} autocomplete='given-name' value={parentName} onInput={(e) => setParentName(e.currentTarget.value)} />
-            </label>
-            <PasswordField value={password} onInput={setPassword} optional />
-            <SubmitButton phase={phase}>Войти в семью</SubmitButton>
-            <button type='button' class='link' onClick={attempt(async () => {
-              await signIn.declineInvitation(step.mailAuthToken)
-              setStep(step.canCreateFamily ? { name: 'mail' } : { name: 'closed', mail: step.mail })
-            })}>Отказаться</button>
-          </form>
-          )
-        : null}
+      {step.name === 'invited' ? <Invited step={step} parentName={parentName} setParentName={setParentName} password={password} setPassword={setPassword} phase={phase} attempt={attempt} onSignedIn={onSignedIn} setStep={setStep} /> : null}
       {step.name === 'closed'
         ? (
           <>
@@ -179,13 +161,73 @@ export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: strin
   )
 }
 
-function GoogleButton ({ clientId, onCredential }: { clientId: string, onCredential: (idToken: string) => void }) {
+/**
+ * A person who already has a family of their own decides here: an empty one goes away by itself on
+ * joining, a non-empty one has to be deleted or left in their own console first — nothing is deleted
+ * from inside an invitation (rule UX core 26).
+ */
+// @tag:parent-invitation @tag:adult-role
+function Invited ({ step, parentName, setParentName, password, setPassword, phase, attempt, onSignedIn, setStep }: {
+  step: Extract<Step, { name: 'invited' }>
+  parentName: string
+  setParentName: (name: string) => void
+  password: string
+  setPassword: (password: string) => void
+  phase: 'idle' | 'pressed' | 'waiting'
+  attempt: (work: () => Promise<void>) => (event: Event) => void
+  onSignedIn: () => void
+  setStep: (step: Step) => void
+}) {
+  const { invitation, ownFamily } = step
+  const role = invitation.role ?? 'manager'
+  const ownIsEmpty = ownFamily ? ownFamily.children === 0 && ownFamily.devices === 0 && ownFamily.adults <= 1 : true
+  const decline = attempt(async () => {
+    await signIn.declineInvitation(step.mailAuthToken)
+    if (ownFamily) {
+      await signIn.session(step.mailAuthToken)
+      onSignedIn()
+    } else setStep(step.canCreateFamily ? { name: 'mail' } : { name: 'closed', mail: step.mail })
+  })
+  const intoOwn = attempt(async () => {
+    await signIn.session(step.mailAuthToken)
+    onSignedIn()
+  })
+  const inviter = <><b>{invitation.inviterName || invitation.inviterMail}</b>{invitation.inviterName && invitation.inviterMail ? ` (${invitation.inviterMail})` : ''}</>
+  if (!ownIsEmpty) {
+    return (
+      <div>
+        <p>{inviter} приглашает вас в свою семью. Но у вас уже есть своя: детей — {ownFamily!.children}, планшетов — {ownFamily!.devices}, взрослых — {ownFamily!.adults}.</p>
+        <p>Чтобы перейти, сначала удалите свою семью или выйдите из неё: войдите в неё, «⋯» → «Семья». Приглашение подождёт.</p>
+        <button type='button' class='primary' disabled={phase !== 'idle'} onClick={intoOwn}>Войти в свою семью</button>
+        <button type='button' class='link' onClick={decline}>Отказаться от приглашения</button>
+      </div>
+    )
+  }
+  return (
+    <form onSubmit={attempt(async () => {
+      await signIn.acceptInvitation({ mailAuthToken: step.mailAuthToken, password, parentName: parentName.trim(), timeZone: browserTimeZone() })
+      onSignedIn()
+    })}>
+      <p>{inviter} приглашает вас в свою семью — {ROLE_TITLES[role].toLowerCase()}: {ROLE_DESCRIPTIONS[role]}.</p>
+      {ownFamily ? <p class='muted small'>Ваша прежняя семья пуста — ни детей, ни планшетов, — она удалится при входе в эту.</p> : null}
+      <label>Ваше имя
+        <input required maxLength={50} autocomplete='given-name' value={parentName} onInput={(e) => setParentName(e.currentTarget.value)} />
+      </label>
+      <PasswordField value={password} onInput={setPassword} optional />
+      <SubmitButton phase={phase}>Войти в семью</SubmitButton>
+      <button type='button' class='link' onClick={decline}>Отказаться</button>
+      {ownFamily ? <button type='button' class='link' onClick={intoOwn}>Войти в свою семью</button> : null}
+    </form>
+  )
+}
+
+export function GoogleButton ({ clientId, onCredential, text = 'signin_with' }: { clientId: string, onCredential: (idToken: string) => void, text?: string }) {
   const target = useRef<HTMLDivElement>(null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     const show = () => {
       window.google!.accounts.id.initialize({ client_id: clientId, callback: (response) => onCredential(response.credential) })
-      window.google!.accounts.id.renderButton(target.current!, { theme: 'outline', size: 'large', text: 'signin_with', locale: 'ru' })
+      window.google!.accounts.id.renderButton(target.current!, { theme: 'outline', size: 'large', text, locale: 'ru' })
     }
     if (window.google) return show()
     const script = document.createElement('script')

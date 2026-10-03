@@ -41,7 +41,7 @@ export function Bans () {
       <p class='muted small'>Запрет «с–до» по дням на выбранные категории. <b>Жёсткий</b> — доп. время не помогает, <b>мягкий</b> — «+N минут» его обходит. Накинуть время во время запрета — «+N» на экране «Сегодня».</p>
       {editing === 'new'
         ? <BanForm categories={view.categories} onClose={() => setEditing(null)} />
-        : <button type='button' class='wide' onClick={() => setEditing('new')}>Добавить запрет</button>}
+        : <button type='button' class='wide act' onClick={() => setEditing('new')}>Добавить запрет</button>}
       {others ? null : <p class='muted'>Других запретов нет.</p>}
       {view.bans.map((ban, index) => {
         if (ban.kind) return null
@@ -135,13 +135,13 @@ function Schedule ({ kind, editing, onEdit, onClose }: { kind: ScheduleKind, edi
                   disabled={main.days === (1 << day)} work={() => toggleDay(day)}>{name}</ActionButton>
               ))}
             </div>
-            <div class='small'>Открыто: {open.length === 0 ? 'ничего' : open.map((category) => category.title).join(', ')} · <button type='button' class='link small' onClick={onEdit}>изменить</button></div>
+            <div class='small'>Открыто: {open.length === 0 ? 'ничего' : open.map((category) => category.title).join(', ')} · <button type='button' class='link small act' onClick={onEdit}>изменить</button></div>
             {exceptions.map((ban) => (
               <div key={banKey(ban)} class='muted small'>{names(ban.categoryIds)}: {banLabel(ban)}{ban.hard ? '' : ', мягкий'}</div>
             ))}
           </>
           )
-        : <div class='muted small'>Включить — {banLabel(spec)}, закроет: {names(view.scheduleDefaults[kind]) || 'категорий нет'} · <button type='button' class='link small' onClick={onEdit}>изменить</button></div>}
+        : <div class='muted small'>Включить — {banLabel(spec)}, закроет: {names(view.scheduleDefaults[kind]) || 'категорий нет'} · <button type='button' class='link small act' onClick={onEdit}>изменить</button></div>}
     </article>
   )
 }
@@ -248,7 +248,7 @@ function BanCard ({ ban, index, categories, onEdit }: { ban: Ban, index: number,
         })}
       </div>
       <div class='chips'>
-        <button type='button' onClick={onEdit}>Изменить</button>
+        <button type='button' class='act' onClick={onEdit}>Изменить</button>
         <ActionButton work={() => ({
           key: `ban-delete-${banKey(ban)}`,
           intent: 'ban-remove',

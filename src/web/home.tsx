@@ -377,7 +377,7 @@ function ChildDevices () {
   return (
     <section class='card'>
       <p><b>Детский планшет ещё не подключён</b> — пока ограничивать нечего.</p>
-      <button type='button' class='primary wide' onClick={() => { location.hash = '#/device' }}>Подключить планшет</button>
+      <button type='button' class='primary wide act' onClick={() => { location.hash = '#/device' }}>Подключить планшет</button>
     </section>
   )
 }
