@@ -1,4 +1,4 @@
-import type { AppUsageItem } from './api.ts'
+import type { AppUsageItem, LaunchableAppItem } from './api.ts'
 import { ParentConsoleError } from './errors.ts'
 import type { FamilyState } from './state.ts'
 import { childCategories } from './state.ts'
@@ -60,11 +60,11 @@ export function appTitle (state: FamilyState, packageName: string, labels: AppLa
  * mostly the firmware's own, and the list hides them unless they have time.
  */
 // @tag:app-service
-// ponytail: «no home-screen icon» stands in for «system app» — the sync already carries isLaunchable per
-// tablet; a real FLAG_SYSTEM mark needs a field in the installed-app protocol and a new Android build
-export function launchablePackages (state: FamilyState, deviceIds: Iterable<string>): Set<string> {
-  return new Set([...deviceIds].flatMap((deviceId) =>
-    (state.installedApps[deviceId]?.apps ?? []).filter((app) => app.isLaunchable).map((app) => app.packageName)))
+// ponytail: «no home-screen icon» stands in for «system app»; a real FLAG_SYSTEM mark needs a field in the
+// protocol. The sync's own isLaunchable is no help: the app list travels encrypted and installedApps is empty
+export function launchablePackages (launchable: LaunchableAppItem[], deviceIds: Iterable<string>): Set<string> {
+  const asked = new Set(deviceIds)
+  return new Set(launchable.filter((item) => asked.has(item.deviceId)).map((item) => item.packageName))
 }
 
 const SECTION_HINTS: Record<string, RegExp> = {

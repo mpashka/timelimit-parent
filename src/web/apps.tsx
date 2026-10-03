@@ -97,6 +97,7 @@ export function Apps () {
       <input type='search' class='search' placeholder='Найти приложение' value={query} onInput={(event) => setQuery(event.currentTarget.value)} />
       {searching && shown === 0 ? <p class='muted small'>Ничего не нашлось. <button type='button' class='link' onClick={() => setQuery('')}>Показать все</button></p> : null}
       {view.appUsageProblem ? <p class='muted small'>Время по приложениям недоступно: {view.appUsageProblem}</p> : null}
+      {view.serviceProblem ? <p class='muted small'>Служебные не отмечены: {view.serviceProblem}</p> : null}
       {newApps.map((app) => <NewAppRow key={app.packageName} app={app} categories={plain(view.categories)} />)}
       {categories.map((category) => (
         <section class='card' key={category.id}>

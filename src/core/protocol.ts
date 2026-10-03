@@ -46,5 +46,8 @@ export const NEW_UI_API_LEVEL = 12
 
 /** `POST /parent/get-app-icons` — docs/specification/protocol-new-ui.md §9. */
 export const APP_ICONS_API_LEVEL = 14
+
+/** `POST /parent/get-launchable-apps` — docs/specification/protocol-new-ui.md §9. */
+export const LAUNCHABLE_APPS_API_LEVEL = 16
 export { ALL_DAYS } from '../shared/time.ts'
 export const USER_FLAGS_ALL = 1 | 2

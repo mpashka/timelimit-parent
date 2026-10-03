@@ -92,6 +92,7 @@ export interface AppsView {
   categories: Array<NamedCategory & { apps: Array<WeekApp & { device: string | null }> }>
   other: WeekApp[]
   appUsageProblem: string | null
+  serviceProblem: string | null
 }
 
 export interface AppCardView extends AppFace {

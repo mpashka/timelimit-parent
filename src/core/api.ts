@@ -52,6 +52,9 @@ export interface AppUsageItem { deviceId: string, day: number, packageName: stri
 /** A tablet's name and launcher icon of one app, PNG in base64 — `POST /parent/get-app-icons`, docs/specification/protocol-new-ui.md §9. */
 export interface AppIconItem { packageName: string, title: string, icon: string }
 
+/** This tablet has the app on its home screen. */
+export interface LaunchableAppItem { deviceId: string, packageName: string }
+
 export const APP_ICONS_PER_REQUEST = 500
 
 export class TimelimitApi {
@@ -215,6 +218,18 @@ export class TimelimitApi {
       { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', deviceId },
       { 401: unauthorizedHint, 409: `device ${deviceId} is not in the family (already removed?) — see \`device list\`` }
     )
+  }
+
+  // @tag:app-service
+  async getLaunchableApps ({ deviceAuthToken, parentId }: { deviceAuthToken: string, parentId: string }): Promise<LaunchableAppItem[]> {
+    const outdated = 'the sync server predates home-screen apps per tablet (apiLevel 16, branch new-ui) — update it'
+    const answer = await this.post<{ items: LaunchableAppItem[] }>(
+      '/parent/get-launchable-apps',
+      { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device' },
+      { 401: unauthorizedHint, 404: outdated }
+    )
+    if (!Array.isArray(answer.items)) throw new ParentConsoleError('/parent/get-launchable-apps answered without items', outdated)
+    return answer.items
   }
 
   // @tag:app-usage

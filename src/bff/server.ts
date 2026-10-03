@@ -9,9 +9,9 @@ import { BadRequestError, buildIntent } from './intents.ts'
 import { type BffStore, type StoredSession } from './store.ts'
 import { usageDays } from '../core/apps.ts'
 import { findChild } from '../core/overview.ts'
-import { buildView, needsAppUsage, needsInvitations, needsLabels, type ViewContext, visiblePackages } from './views.ts'
+import { buildView, needsAppUsage, needsInvitations, needsLabels, needsLaunchable, type ViewContext, visiblePackages } from './views.ts'
 import { type AppLabel, mergeAppLabels } from '../core/apps.ts'
-import { APP_ICONS_API_LEVEL } from '../core/protocol.ts'
+import { APP_ICONS_API_LEVEL, LAUNCHABLE_APPS_API_LEVEL } from '../core/protocol.ts'
 import { iconPath, PlayCatalog } from './app-labels.ts'
 
 // @tag:parent-console
@@ -202,6 +202,7 @@ export class Bff {
     const { state, staleSince } = await this.stateOf(session)
     const context = this.viewContext(session, state, url, request)
     if (needsAppUsage(name)) context.appUsage = await this.appUsageOf(session, context)
+    if (needsLaunchable(name)) context.launchable = await this.launchableOf(session, context)
     if (needsLabels(name)) context.labels = await this.labelsOf(session, context, name)
     if (needsInvitations(name)) context.invitations = await this.invitationsOf(session)
     const data = buildView(name, context)
@@ -230,6 +231,7 @@ export class Bff {
     const context = this.viewContext(session, result, url, request)
     if (typeof body.child === 'string') context.childId = body.child
     if (needsAppUsage(view)) context.appUsage = await this.appUsageOf(session, context)
+    if (needsLaunchable(view)) context.launchable = await this.launchableOf(session, context)
     if (needsLabels(view)) context.labels = await this.labelsOf(session, context, view)
     if (needsInvitations(view)) context.invitations = await this.invitationsOf(session)
     send(response, 200, { data: buildView(view, context) })
@@ -245,6 +247,20 @@ export class Bff {
     const { fromDay, toDay } = usageDays(context.state, childId, context.now)
     try {
       return { items: await this.clientFor(session).appUsage(childId, fromDay, toDay) }
+    } catch (error) {
+      const { failure } = describeFailure(error)
+      return { problem: failure.hint ? `${failure.title} — ${failure.hint}` : failure.title }
+    }
+  }
+
+  /** Without it nothing is marked service, and the list says why instead of hiding apps on a guess. */
+  // @tag:app-service
+  private async launchableOf (session: StoredSession, context: ViewContext): Promise<ViewContext['launchable']> {
+    if (context.state.apiLevel < LAUNCHABLE_APPS_API_LEVEL) {
+      return { problem: `сервер синхронизации старее apiLevel ${LAUNCHABLE_APPS_API_LEVEL} (у него ${context.state.apiLevel}) — обновите его` }
+    }
+    try {
+      return { items: await this.clientFor(session).launchableApps() }
     } catch (error) {
       const { failure } = describeFailure(error)
       return { problem: failure.hint ? `${failure.title} — ${failure.hint}` : failure.title }

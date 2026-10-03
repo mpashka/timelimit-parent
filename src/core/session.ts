@@ -1,4 +1,4 @@
-import { type AddDeviceToken, APP_ICONS_PER_REQUEST, type AppIconItem, type AppUsageItem, type ParentInvitation, type TimelimitApi } from './api.ts'
+import { type AddDeviceToken, APP_ICONS_PER_REQUEST, type AppIconItem, type AppUsageItem, type LaunchableAppItem, type ParentInvitation, type TimelimitApi } from './api.ts'
 import { ParentConsoleError } from './errors.ts'
 import type { ParentAction, PushActionItem } from './protocol.ts'
 import { createEmptyState, type FamilyState, findParentOfDevice, mergeServerStatus, toClientStatus } from './state.ts'
@@ -149,6 +149,12 @@ export class SyncClient {
   async appUsage (userId: string, fromDay: number, toDay: number): Promise<AppUsageItem[]> {
     const parentId = this.parentUserId(await this.loadCachedState())
     return this.api.getAppUsage({ deviceAuthToken: this.subject.authToken, parentId, userId, fromDay, toDay })
+  }
+
+  // @tag:app-service
+  async launchableApps (): Promise<LaunchableAppItem[]> {
+    const parentId = this.parentUserId(await this.loadCachedState())
+    return this.api.getLaunchableApps({ deviceAuthToken: this.subject.authToken, parentId })
   }
 
   /** What the server has of the tablets' names and icons for these packages; the rest it has not received yet. */

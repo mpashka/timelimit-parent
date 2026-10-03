@@ -1,4 +1,4 @@
-import type { AppUsageItem, ParentInvitation } from '../core/api.ts'
+import type { AppUsageItem, LaunchableAppItem, ParentInvitation } from '../core/api.ts'
 import { appCard, type AppLabels, appTimes, appTitle, deviceStatus, launchablePackages, newApps, packageOf, usageDays } from '../core/apps.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import { dailyLimitRules } from '../core/operations.ts'
@@ -37,6 +37,8 @@ export interface ViewContext {
   signedInUserId: string
   /** Time per app for the child's last seven days, fetched for the views that show it; `problem` says why it is missing. */
   appUsage?: { items: AppUsageItem[] } | { problem: string }
+  /** Which tablet has which app on its home screen, for the list that marks service apps; `problem` says why it is missing. */
+  launchable?: { items: LaunchableAppItem[] } | { problem: string }
   /** Names and icons from Google Play and the tablets, for the views that show apps. */
   labels?: AppLabels
   /** Addresses invited into the family and not answered yet; `problem` says why the list is missing. */
@@ -49,6 +51,9 @@ export const needsInvitations = (name: string): boolean => name === 'parents'
 /** Views that need `/parent/get-app-usage`; the server answers it separately from the sync status. */
 export const USAGE_VIEWS = ['now', 'apps', 'devices']
 export const needsAppUsage = (name: string): boolean => USAGE_VIEWS.includes(name) || name.startsWith('app/')
+
+// @tag:app-service
+export const needsLaunchable = (name: string): boolean => name === 'apps'
 
 /** Views that draw apps by name and icon. */
 // @tag:app-icon
@@ -156,8 +161,9 @@ const viewApps = (context: ViewContext) => {
   const week = usage === null ? [] : appTimes(context.state, childId, usage, fromDay, toDay, labelsOf(context))
   const rules = new Map((child.appRules ?? []).map((rule) => [rule.packageName, rule]))
   const childDevices = context.state.devices.data.filter((device) => device.currentUserId === childId).map((device) => device.deviceId)
-  const launchable = launchablePackages(context.state, childDevices)
-  const row = (packageName: string, service = !launchable.has(packageName)) => {
+  const launchableItems = context.launchable !== undefined && 'items' in context.launchable ? context.launchable.items : null
+  const isService = (packageName: string, deviceIds: string[]) => launchableItems !== null && !launchablePackages(launchableItems, deviceIds).has(packageName)
+  const row = (packageName: string, service = isService(packageName, childDevices)) => {
     const rule = rules.get(packageName)
     return {
       ...appFace(context, packageName),
@@ -170,7 +176,7 @@ const viewApps = (context: ViewContext) => {
   const entry = (specifier: string) => {
     const [packageName, deviceId] = specifier.split('@')
     if (deviceId === undefined) return { ...row(packageName), device: null }
-    return { ...row(packageName, !launchablePackages(context.state, [deviceId]).has(packageName)), device: deviceNames.get(deviceId) ?? 'удалённый планшет' }
+    return { ...row(packageName, isService(packageName, [deviceId])), device: deviceNames.get(deviceId) ?? 'удалённый планшет' }
   }
   const assigned = new Set(categories.flatMap((category) => category.apps))
   return {
@@ -184,7 +190,8 @@ const viewApps = (context: ViewContext) => {
         .sort((a, b) => b.weekMs - a.weekMs)
     })),
     other: week.filter((item) => !assigned.has(item.packageName)).map((item) => row(item.packageName)),
-    appUsageProblem: usageProblem(context)
+    appUsageProblem: usageProblem(context),
+    serviceProblem: context.launchable !== undefined && 'problem' in context.launchable ? context.launchable.problem : null
   }
 }
 

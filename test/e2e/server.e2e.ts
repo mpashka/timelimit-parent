@@ -257,6 +257,24 @@ test('add-device token lets a child device join the family', async () => {
   assert.equal(reused.status, 401, 'a token works once')
 })
 
+// @tag:app-service
+test('a tablet that sends an app icon has that app on its home screen, and only that tablet', async () => {
+  const { token, deviceId } = await session.createAddDeviceToken()
+  const joined = await fetch(`${api.serverUrl}/child/add-device`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ registerToken: token, childDevice: { model: 'e2e tablet' }, deviceName: 'Icon tablet', clientLevel: 3 })
+  })
+  const { deviceAuthToken } = await joined.json() as { deviceAuthToken: string }
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='
+  const report = { type: 'REPORT_APP_ICONS', items: [{ packageName: 'com.e2e.game', title: 'Game', icon: png, versionCode: 1 }] }
+  for (const sequenceNumber of [1, 2]) {
+    await api.pushActions({ deviceAuthToken, actions: [{ type: 'appLogic', encodedAction: JSON.stringify(report), sequenceNumber, integrity: '', userId: '' }] })
+  }
+  const launchable = await session.launchableApps()
+  assert.deepEqual(launchable.filter((item) => item.packageName === 'com.e2e.game'), [{ deviceId, packageName: 'com.e2e.game' }], 'one pair, however often the icon comes')
+})
+
 // @tag:device-flags
 test('device flags: each change touches only its own bits', async () => {
   const tablet = (await session.sync()).devices.data.find((d) => d.name === 'Tablet')!

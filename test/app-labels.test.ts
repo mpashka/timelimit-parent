@@ -35,12 +35,7 @@ test('Play page: the store half of og:title is dropped whatever the dash, the ic
 
 // @tag:app-service
 test('service app: without a home-screen icon on the tablets asked — per tablet, not per family', () => {
-  const state = fixtureState()
-  const app = (packageName: string, isLaunchable: boolean) => ({ packageName, title: packageName, isLaunchable, recommendation: 'none' as const })
-  state.installedApps = {
-    tabA: { version: '1', apps: [app('com.game', true), app('com.miui.wallpaper', false)] },
-    tabB: { version: '1', apps: [app('com.miui.wallpaper', true)] }
-  }
-  assert.deepEqual([...launchablePackages(state, ['tabA'])], ['com.game'])
-  assert.deepEqual([...launchablePackages(state, ['tabA', 'tabB', 'gone'])].sort(), ['com.game', 'com.miui.wallpaper'])
+  const launchable = [{ deviceId: 'tabA', packageName: 'com.game' }, { deviceId: 'tabB', packageName: 'com.miui.wallpaper' }]
+  assert.deepEqual([...launchablePackages(launchable, ['tabA'])], ['com.game'])
+  assert.deepEqual([...launchablePackages(launchable, ['tabA', 'tabB', 'gone'])].sort(), ['com.game', 'com.miui.wallpaper'])
 })
