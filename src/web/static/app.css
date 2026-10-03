@@ -13,6 +13,7 @@
   --ok: #1e8a5a;
   --closed: #6b5bd2;
   --deny: #c2412d;
+  --switch-off: #b9bdc8;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark) {
@@ -30,6 +31,7 @@
     --ok: #47c28a;
     --closed: #9c8ff0;
     --deny: #ee7a64;
+    --switch-off: #4a5162;
   }
 }
 * { box-sizing: border-box; }
@@ -81,18 +83,22 @@ progress { width: 100%; height: 8px; margin: 8px 0 2px; accent-color: var(--acce
 .checks { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 8px 0; }
 .check { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
 .check input { width: 20px; height: 20px; accent-color: var(--accent); }
-.switch { display: inline-flex; align-items: center; gap: 8px; margin: 0; min-height: 44px; }
+.switch { display: flex; align-items: center; gap: 12px; margin: 0; min-height: 48px; cursor: pointer; }
+.chips .switch { display: inline-flex; }
 .switch input {
-  appearance: none; width: 48px; height: 28px; border-radius: 999px; margin: 0; cursor: pointer;
-  background: var(--line); position: relative; transition: background .15s;
+  appearance: none; flex: none; width: 52px; height: 32px; border-radius: 999px; margin: 0; padding: 0; cursor: pointer;
+  background: var(--switch-off); border: none; position: relative; transition: background .15s;
 }
 .switch input::after {
-  content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%;
-  background: var(--card); transition: left .15s;
+  content: ''; position: absolute; top: 4px; left: 4px; width: 24px; height: 24px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .35); transition: transform .15s;
 }
 .switch input:checked { background: var(--accent); }
-.switch input:checked::after { left: 23px; }
+.switch input:checked::after { transform: translateX(20px); }
+.switch input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch input:disabled { cursor: default; }
 .switch.pressed { opacity: .7; }
+@media (prefers-reduced-motion: reduce) { .switch input, .switch input::after { transition: none; } }
 label { display: block; margin: 8px 0; }
 label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 4px 0; flex-wrap: wrap; }
 input, textarea, select {
@@ -183,6 +189,7 @@ button.deny { color: var(--deny); background: none; }
 .hero .big small { font-size: .9rem; font-weight: 400; margin-left: 6px; }
 .app-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin: 0 0 6px; color: var(--text); text-decoration: none; }
 .app-row .grow, .device-line .grow { flex: 1; min-width: 0; }
+.switch .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .app-row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .app-row .value { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .app-row.new { border-color: var(--accent); align-items: flex-start; }

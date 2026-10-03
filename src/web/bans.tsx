@@ -3,7 +3,7 @@ import { SCHEDULE_SHAPE_HINT, type ScheduleKind, scheduleKind, scheduleWindow } 
 import { formatClock, localTime, parseClock } from '../shared/time.ts'
 import type { Ban, BansView } from './api.ts'
 import { ALL_DAYS, type BanSpec, banKey, banLabel, clockAfter, DAY_NAMES, formatUntil, MINUTE_MAX } from './format.ts'
-import { ActionButton, SubmitButton, useApp, useBusy, useScreen, type Work } from './ui.tsx'
+import { ActionButton, SubmitButton, Switch, useApp, useBusy, useScreen, type Work } from './ui.tsx'
 
 // @tag:parent-console
 
@@ -72,7 +72,7 @@ type Wanted = BanSpec & { categories: string[] }
  */
 function Schedule ({ kind, editing, onEdit, onClose }: { kind: ScheduleKind, editing: boolean, onEdit: () => void, onClose: () => void }) {
   const view = useScreen<BansView>()
-  const { pending, run, now, child } = useApp()
+  const { now, child } = useApp()
   const tz = child.timeZone
   const { title, spec } = SCHEDULES[kind]
   const names = (ids: string[]) => ids.map((id) => view.categories.find((c) => c.id === id)?.title ?? id).join(', ')
@@ -122,13 +122,7 @@ function Schedule ({ kind, editing, onEdit, onClose }: { kind: ScheduleKind, edi
       <div class='row'>
         <h2>{title} <span class='muted small'>{status}</span></h2>
         <span class='chips'>
-          <label class={`switch ${pending?.key === key ? 'pressed' : ''}`}>
-            <input type='checkbox' role='switch' checked={on} disabled={pending?.key === key} onChange={(event) => {
-              event.currentTarget.checked = on
-              void run(on ? set([], `${title} выключен`) : turnOn)
-            }} />
-            {on ? 'вкл' : 'выкл'}
-          </label>
+          <Switch on={on} work={() => on ? set([], `${title} выключен`) : turnOn}>{on ? 'вкл' : 'выкл'}</Switch>
         </span>
       </div>
       {main

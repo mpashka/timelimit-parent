@@ -2,7 +2,7 @@ import { Fragment } from 'preact'
 import type { DevicesView, DeviceWithStatus } from './api.ts'
 import { clockOf, formatDuration } from './format.ts'
 import { DEVICE_FLAGS, isFlagIneffective, NOT_DEVICE_OWNER, type DeviceFlag } from '../shared/device-flags.ts'
-import { ActionButton, useApp, useScreen, type Work } from './ui.tsx'
+import { Switch, useApp, useScreen, type Work } from './ui.tsx'
 
 // @tag:device-state
 
@@ -41,9 +41,10 @@ function DeviceFlags ({ device }: { device: DeviceWithStatus }) {
         {DEVICE_FLAGS.map((flag) => {
           const on = (device.exFlags & flag.bit) !== 0
           return (
-            <li key={flag.name} class='device-line'>
-              <div class='grow'>{flag.title}<div class='muted small'>{on ? 'включено' : 'выключено'}{isFlagIneffective(flag, device.cProtectionLevel) ? ` · ${NOT_DEVICE_OWNER}` : ''}</div></div>
-              <ActionButton work={toggle(flag, !on)}>{on ? 'Выключить' : 'Включить'}</ActionButton>
+            <li key={flag.name}>
+              <Switch on={on} work={toggle(flag, !on)}>
+                {flag.title}{isFlagIneffective(flag, device.cProtectionLevel) ? <span class='muted small'>{NOT_DEVICE_OWNER}</span> : null}
+              </Switch>
             </li>
           )
         })}

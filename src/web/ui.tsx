@@ -108,33 +108,54 @@ export function useBusy (): [phase: 'idle' | 'pressed' | 'waiting', wrap: (work:
   return [phase, wrap]
 }
 
-export function ActionButton ({ work, class: className = '', children, disabled }: {
-  work: () => Work, class?: string, children: ComponentChildren, disabled?: boolean
-}) {
+function useWork (): [mine: boolean, waiting: boolean, start: (work: () => Work) => void] {
   const { pending, run, showError } = useApp()
   const [key, setKey] = useState<string | null>(null)
   const mine = pending !== null && pending.key === key
+  const start = (work: () => Work) => {
+    let item: Work
+    try {
+      item = work()
+    } catch (ex) {
+      showError(ex)
+      return
+    }
+    setKey(item.key)
+    void run(item)
+  }
+  return [mine, mine && pending.waiting, start]
+}
+
+export function ActionButton ({ work, class: className = '', children, disabled }: {
+  work: () => Work, class?: string, children: ComponentChildren, disabled?: boolean
+}) {
+  const [mine, waiting, start] = useWork()
   return (
     <button
       type='button'
       class={`${className} ${mine ? 'pressed' : ''}`}
       disabled={disabled || mine}
-      aria-busy={mine && pending.waiting}
-      onClick={() => {
-        let item: Work
-        try {
-          item = work()
-        } catch (ex) {
-          showError(ex)
-          return
-        }
-        setKey(item.key)
-        void run(item)
-      }}
+      aria-busy={waiting}
+      onClick={() => start(work)}
     >
-      {mine && pending.waiting ? <span class='spinner' aria-hidden='true' /> : null}
+      {waiting ? <span class='spinner' aria-hidden='true' /> : null}
       {children}
     </button>
+  )
+}
+
+/** An on/off setting: the state shown is the one on the server until the work is done. */
+export function Switch ({ on, work, children }: { on: boolean, work: () => Work, children: ComponentChildren }) {
+  const [mine, waiting, start] = useWork()
+  return (
+    <label class={`switch ${mine ? 'pressed' : ''}`}>
+      <span class='grow'>{children}</span>
+      {waiting ? <span class='spinner' aria-hidden='true' /> : null}
+      <input type='checkbox' role='switch' checked={on} disabled={mine} aria-busy={waiting} onChange={(event) => {
+        event.currentTarget.checked = on
+        start(work)
+      }} />
+    </label>
   )
 }
 
