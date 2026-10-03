@@ -83,7 +83,7 @@ export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: strin
 
   return (
     <main class='page signin'>
-      <h1>Веб-админка TimeLimit</h1>
+      <h1>TimeLimit Control</h1>
       <p class='muted small account'>Веб-админка {serverLabel(apiBase())}</p>
       {step.name === 'mail'
         ? (

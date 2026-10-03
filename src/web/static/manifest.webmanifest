@@ -1,6 +1,6 @@
 {
-  "name": "Веб-админка TimeLimit",
-  "short_name": "Веб-админка",
+  "name": "TimeLimit Control",
+  "short_name": "TimeLimit",
   "lang": "ru",
   "start_url": "./",
   "scope": "./",
