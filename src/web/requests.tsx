@@ -75,7 +75,7 @@ function RequestCard ({ request, view }: { request: RequestItem, view: RequestsV
       {request.word ? <p class='quote'>«{request.word}»</p> : null}
       <dl class='facts'>
         {category
-          ? <><dt>{category.title} сегодня</dt><dd>{formatDuration(category.usedTodayMs)}{category.limitNowMs !== null ? ` из ${formatDuration(category.limitNowMs)}` : ''}</dd></>
+          ? <><dt>{category.title} сегодня</dt><dd>{formatDuration(category.usedTodayMs)}{category.limitNowMs !== null ? ` из ${formatDuration(category.limitNowMs)}` : ''}</dd>{category.week ? <><dt>за неделю</dt><dd>{formatDuration(category.week.usedMs)} из {formatDuration(category.week.limitMs)}</dd></> : null}</>
           : null}
         {request.reason ? <><dt>Почему закрыто</dt><dd>{request.reason}</dd></> : null}
       </dl>

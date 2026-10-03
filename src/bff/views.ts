@@ -233,7 +233,7 @@ const viewRequests = (context: ViewContext) => {
       createdAt: request.createdAt,
       expiresAt: request.expiresAt,
       status: requestStatus(request, context.now),
-      category: category === null ? null : { id: category.id, title: category.title, usedTodayMs: category.usedTodayMs, limitNowMs: category.limitNowMs },
+      category: category === null ? null : { id: category.id, title: category.title, usedTodayMs: category.usedTodayMs, limitNowMs: category.limitNowMs, week: category.week },
       categoryIsFallback: request.categoryId === '' && category !== null,
       reason,
       answer: request.answer === undefined ? null : { ...request.answer, parentName: names.get(request.answer.parentUserId) ?? 'родитель' }

@@ -30,12 +30,12 @@ export function formatOverview (overview: ChildOverview): string {
   }
   const rows = overview.categories.map((c) => [
     `${'  '.repeat(c.depth)}${c.title}`, hours(c.usedTodayMs), hours(c.limitNowMs), hours(c.remaining?.includingExtraTime),
-    c.extraTimeMs ? `+${hours(c.extraTimeMs)}` : '', String(c.apps.length), state(c)
+    c.week ? `${hours(c.week.usedMs)}/${hours(c.week.limitMs)}` : '', c.extraTimeMs ? `+${hours(c.extraTimeMs)}` : '', String(c.apps.length), state(c)
   ])
   const lines = [
     `${child.name} (${child.id}, ${child.timeZone}) — ${localDateTime(overview.now, child.timeZone)}`,
     '',
-    table(['category', 'used', 'limit', 'left', 'extra', 'apps', 'state'], rows)
+    table(['category', 'used', 'limit', 'left', 'week', 'extra', 'apps', 'state'], rows)
   ]
   const banLine = (b: ChildOverview['bans'][number], i: number) =>
     `  ${i + 1}) ${banKey(b)}${b.activeNow ? ' [ACTIVE]' : ''} — ${b.categoryIds.map((id) => titles.get(id) ?? id).join(', ')}`

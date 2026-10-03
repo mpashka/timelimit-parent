@@ -2,6 +2,7 @@ import { CATEGORY_TITLE_MAX, categoryTitleProblem } from '../shared/category-tit
 import { ParentConsoleError } from './errors.ts'
 import { generateId } from './ids.ts'
 import { ALL_DAYS, MINUTE_MAX, type ParentAction, type ServerRule, URL_FILTER_API_LEVEL, type UrlFilter } from './protocol.ts'
+import { isWholeDayLimit } from './overview.ts'
 import { type CategoryView, childCategories, type FamilyState, type User } from './state.ts'
 import { localTime } from '../shared/time.ts'
 
@@ -80,8 +81,8 @@ export function restoreTemporaryBlocks (before: CategoryView[]): ParentAction[] 
     : { type: 'UPDATE_CATEGORY_TEMPORARILY_BLOCKED', categoryId: c.id, blocked: false })
 }
 
-const isDailyLimit = (rule: ServerRule): boolean =>
-  rule.maxTime > 0 && rule.start === 0 && rule.end === MINUTE_MAX && rule.e === undefined && rule.session === 0
+const isDailyLimit = (rule: ServerRule): boolean => rule.perDay && isWholeDayLimit(rule) && rule.e === undefined
+const isWeeklyLimit = (rule: ServerRule): boolean => !rule.perDay && isWholeDayLimit(rule) && rule.e === undefined
 
 export const dailyLimitRules = (category: CategoryView): ServerRule[] => category.rules.filter(isDailyLimit)
 
@@ -116,6 +117,20 @@ export function setDailyLimit ({ category, minutes, days = ALL_DAYS }: { categor
     actions.push({
       type: 'CREATE_TIMELIMIT_RULE',
       rule: { ruleId: generateId(), categoryId: category.id, time: Math.round(minutes * 60000), days, extraTime: false, start: 0, end: MINUTE_MAX, dur: 0, pause: 0, perDay: true }
+    })
+  }
+  return actions
+}
+
+// @tag:category-limits
+/** Sets (minutes > 0) or removes (minutes = null) the weekly limit of a category: one rule summing the time of all days. */
+export function setWeeklyLimit ({ category, minutes }: { category: CategoryView, minutes: number | null }): ParentAction[] {
+  const actions: ParentAction[] = category.rules.filter(isWeeklyLimit).map((r) => ({ type: 'DELETE_TIMELIMIT_RULE', ruleId: r.id }))
+  if (minutes !== null) {
+    if (!(minutes > 0)) throw new ParentConsoleError(`limit must be positive minutes or "off", got ${minutes}`)
+    actions.push({
+      type: 'CREATE_TIMELIMIT_RULE',
+      rule: { ruleId: generateId(), categoryId: category.id, time: Math.round(minutes * 60000), days: ALL_DAYS, extraTime: false, start: 0, end: MINUTE_MAX, dur: 0, pause: 0, perDay: false }
     })
   }
   return actions

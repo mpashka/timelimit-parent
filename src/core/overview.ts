@@ -1,6 +1,6 @@
 import { type Ban, isBanActiveAt, readBans, readLegacyBans } from './bans.ts'
 import { ParentConsoleError } from './errors.ts'
-import type { ServerDevice, ServerRule, UsedTimeItem } from './protocol.ts'
+import { MINUTE_MAX, type ServerDevice, type ServerRule, type UsedTimeItem } from './protocol.ts'
 import { type CategoryView, childCategories, children, type FamilyState, type User } from './state.ts'
 import { localTime } from '../shared/time.ts'
 
@@ -47,6 +47,28 @@ export function remainingTime ({ rules, usedTimes, extraTime, dayOfEpoch, dayOfW
   return { includingExtraTime: withoutExtra + Math.min(extraTime, withExtra - withoutExtra), default: withoutExtra }
 }
 
+export const isWholeDayLimit = (rule: ServerRule): boolean =>
+  rule.maxTime > 0 && rule.start === 0 && rule.end === MINUTE_MAX && rule.session === 0
+
+export interface WeekLimit {
+  usedMs: number
+  limitMs: number
+}
+
+// @tag:category-limits
+/** The whole-day weekly rule of today with the least time left: shown always, whether or not it closed the category. */
+function weekLimitOf (rules: ServerRule[], usedTimes: UsedTimeItem[], dayOfEpoch: number, dayOfWeek: number): WeekLimit | null {
+  const weekly = rules.filter((r) => !r.perDay && isWholeDayLimit(r) && !isLikeBan(r))
+    .map((r) => ({ usedMs: usedTimeForRule(usedTimes, r, dayOfEpoch - dayOfWeek, dayOfWeek), limitMs: r.maxTime }))
+  return weekly.reduce<WeekLimit | null>((best, w) => best === null || w.limitMs - w.usedMs < best.limitMs - best.usedMs ? w : best, null)
+}
+
+// @tag:category-limits
+function dailyLimitNow (rules: ServerRule[]): number | null {
+  const daily = rules.filter((r) => r.perDay)
+  return daily.length === 0 ? null : Math.min(...daily.map((r) => r.maxTime))
+}
+
 export type BlockReason = 'temporarily-blocked' | 'ban' | 'legacy-blocked-time' | 'limit-reached'
 
 export interface CategoryOverview {
@@ -57,6 +79,7 @@ export interface CategoryOverview {
   apps: string[]
   usedTodayMs: number
   limitNowMs: number | null
+  week: WeekLimit | null
   remaining: RemainingTime | null
   extraTimeMs: number
   limitsDisabledUntil: number | null
@@ -179,7 +202,8 @@ export function childOverview (state: FamilyState, childId: string, now: number)
       depth,
       apps: category.apps,
       usedTodayMs: todayItems.reduce((max, t) => Math.max(max, t.time), 0),
-      limitNowMs: regularRules.length === 0 ? null : Math.min(...regularRules.map((r) => r.maxTime)),
+      limitNowMs: dailyLimitNow(regularRules),
+      week: weekLimitOf(regularRules, category.usedTimes, dayOfEpoch, dayOfWeek),
       remaining,
       extraTimeMs,
       limitsDisabledUntil: limitsDisabled ? limitsDisabledUntil : null,

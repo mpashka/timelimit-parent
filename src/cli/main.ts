@@ -10,7 +10,7 @@ import { exportChild, overlayConfigs, planImport, type PortableConfig } from '..
 import { ParentConsoleError } from '../core/errors.ts'
 import { DEVICE_FLAGS, findDeviceFlag, isFlagIneffective, NOT_DEVICE_OWNER } from '../shared/device-flags.ts'
 import {
-  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, setDailyLimit, setUrlFilter, unlockChild
+  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, setDailyLimit, setUrlFilter, setWeeklyLimit, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
 import { ALL_DAYS, APP_ICONS_API_LEVEL, type ParentAction } from '../core/protocol.ts'
@@ -42,7 +42,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   ban list [child]
   ban add --days mo-fr --from 21:00 --to 07:00 (--categories a,b | --all-categories) [--soft]
   ban rm <number> [--categories a,b]
-  limit set <category> <minutes|off> [--days mo-fr]
+  limit set <category> <minutes|off> [--days mo-fr | --week]   --week: one limit for the whole week
   limit app <package> <minutes> [--title T] [--days D]
   app move <package> <category|none>
   request list [child]                    waiting and today's requests of the child
@@ -76,6 +76,7 @@ const { values: options, positionals } = parseArgs({
     all: { type: 'boolean' },
     until: { type: 'string' },
     off: { type: 'boolean' },
+    week: { type: 'boolean' },
     title: { type: 'string' },
     allow: { type: 'string' },
     block: { type: 'string' },
@@ -292,7 +293,9 @@ async function main (): Promise<void> {
       const days = options.days ? parseDays(options.days) : ALL_DAYS
       if (args[0] === 'set') {
         const value = need(args[2], 'minutes or off')
-        return apply(session, setDailyLimit({ category: category(args[1]), minutes: value === 'off' ? null : parseDurationMinutes(value), days }))
+        const minutes = value === 'off' ? null : parseDurationMinutes(value)
+        if (options.week) return apply(session, setWeeklyLimit({ category: category(args[1]), minutes }))
+        return apply(session, setDailyLimit({ category: category(args[1]), minutes, days }))
       }
       if (args[0] === 'app') {
         return apply(session, limitApp({ state, childId: owner.id, packageName: need(args[1], 'package'), minutes: parseDurationMinutes(need(args[2], 'minutes')), title: options.title, days }))

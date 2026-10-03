@@ -46,6 +46,8 @@ export interface CategoryNow {
   depth: number
   usedTodayMs: number
   limitNowMs: number | null
+  /** The weekly whole-day limit of today, used time summed over the week's days. */
+  week: { usedMs: number, limitMs: number } | null
   remaining: { includingExtraTime: number } | null
   extraTimeMs: number
   limitsDisabledUntil: number | null
@@ -136,7 +138,7 @@ export interface RequestItem extends AppFace {
   createdAt: number
   expiresAt: number
   status: 'waiting' | 'expired' | 'allowed' | 'denied'
-  category: { id: string, title: string, usedTodayMs: number, limitNowMs: number | null } | null
+  category: { id: string, title: string, usedTodayMs: number, limitNowMs: number | null, week: { usedMs: number, limitMs: number } | null } | null
   categoryIsFallback: boolean
   reason: string | null
   answer: { kind: 'app' | 'category' | 'deny', until: number, word: string, parentName: string, at: number, repeatAfter: number } | null

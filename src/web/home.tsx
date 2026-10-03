@@ -194,12 +194,15 @@ function descendantIds (categories: CategoryNow[], id: string): Set<string> {
 }
 
 /** What stands in the way now, in a few words, or null when nothing does. */
+// @tag:category-limits
+const weekSpent = (category: CategoryNow): boolean => category.week !== null && category.week.usedMs >= category.week.limitMs
+
 function stateText (category: CategoryNow, view: NowView, now: number): string | null {
   const tz = view.child.timeZone
   const activeBan: Ban | undefined = view.bans.find((ban) => ban.activeNow && ban.categoryIds.includes(category.id))
   if (category.temporarilyBlocked) return `закрыто ${category.temporarilyBlocked.until ? formatUntil(category.temporarilyBlocked.until, now, tz) : 'до снятия'}`
   if (category.blockedNow === 'ban' || category.blockedNow === 'legacy-blocked-time') return `запрет ${activeBan ? formatUntil(banEndsAt(activeBan, now, tz), now, tz) : ''}`.trim()
-  if (category.blockedNow === 'limit-reached') return 'время вышло'
+  if (category.blockedNow === 'limit-reached') return weekSpent(category) ? 'неделя исчерпана — до понедельника' : 'время вышло'
   if (category.blockedByParent) return `закрыто вместе с «${view.categories.find((c) => c.id === category.blockedByParent)?.title ?? ''}»`
   if (category.limitsDisabledUntil) return `лимиты сняты ${formatUntil(category.limitsDisabledUntil, now, tz)}`
   return null
@@ -230,12 +233,16 @@ function CategoryNode ({ category, apps, deviceChosen, last, open, toggle }: {
             <span class='name'>{category.title}</span>
             {state
               ? <span class={`small state ${tone}`}>{state}</span>
-              : limit === null ? <span class='muted small'>без лимита</span> : null}
+              : limit === null && category.week === null ? <span class='muted small'>без лимита</span> : null}
             {limit !== null && !deviceChosen
               ? <span class={`bar ${tone}`}><i style={{ width: `${Math.min(100, Math.round(category.usedTodayMs / (limit + category.extraTimeMs) * 100))}%` }} /></span>
               : null}
           </span>
-          <span class='value'>{value}{limit !== null && !deviceChosen ? <small class='muted'>{formatDuration(category.usedTodayMs)} из {formatDuration(limit)}</small> : null}</span>
+          <span class='value'>
+            {value}
+            {limit !== null && !deviceChosen ? <small class='muted'>{formatDuration(category.usedTodayMs)} из {formatDuration(limit)}</small> : null}
+            {category.week !== null && !deviceChosen ? <small class={weekSpent(category) ? 'state closed' : 'muted'}>неделя {formatDuration(category.week.usedMs)} из {formatDuration(category.week.limitMs)}</small> : null}
+          </span>
         </button>
         <CategoryMenu category={category} />
       </div>
