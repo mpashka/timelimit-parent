@@ -120,3 +120,20 @@ test('now view: a category without a limit takes its time from its apps, per tab
   assert.deepEqual(allowed.appList.map((app) => app.packageName), ['com.android.dialer'])
   assert.deepEqual(view.apps.map((app) => [app.packageName, app.byDevice]), [['com.android.dialer', { devC01: 120000, devC02: 60000 }]])
 })
+
+// @tag:app-service
+test('apps view: a tablet without icon reports marks nothing service and is named; with both reported the mark is set', () => {
+  const state = fixtureState()
+  const now = moscow(14, 15)
+  const { toDay } = usageDays(state, 'child1', now)
+  const appUsage = { items: [{ deviceId: 'devC01', day: toDay, packageName: 'com.android.dialer', ms: 60000 }] }
+  type Apps = { other: Array<{ packageName: string, service: boolean }>, categories: Array<{ apps: Array<{ packageName: string, service: boolean }> }>, serviceProblem: string | null }
+  const view = (items: Array<{ deviceId: string, packageName: string }>) => buildView('apps', { state, now, childId: 'child1', serverUrl: '', signedInUserId: 'parent1', appUsage, launchable: { items } }) as Apps
+  const dialer = (apps: Apps) => [...apps.other, ...apps.categories.flatMap((category) => category.apps)].find((app) => app.packageName === 'com.android.dialer')!
+  const half = view([{ deviceId: 'devC01', packageName: 'com.game' }])
+  assert.equal(dialer(half).service, false)
+  assert.match(half.serviceProblem!, new RegExp(state.devices.data.find((d) => d.deviceId === 'devC02')!.name))
+  const both = view([{ deviceId: 'devC01', packageName: 'com.game' }, { deviceId: 'devC02', packageName: 'com.game' }])
+  assert.equal(dialer(both).service, true)
+  assert.equal(both.serviceProblem, null)
+})

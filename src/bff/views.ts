@@ -161,8 +161,12 @@ const viewApps = (context: ViewContext) => {
   const week = usage === null ? [] : appTimes(context.state, childId, usage, fromDay, toDay, labelsOf(context))
   const rules = new Map((child.appRules ?? []).map((rule) => [rule.packageName, rule]))
   const childDevices = context.state.devices.data.filter((device) => device.currentUserId === childId).map((device) => device.deviceId)
-  const launchableItems = context.launchable !== undefined && 'items' in context.launchable ? context.launchable.items : null
-  const isService = (packageName: string, deviceIds: string[]) => launchableItems !== null && !launchablePackages(launchableItems, deviceIds).has(packageName)
+  const launchableItems = context.launchable !== undefined && 'items' in context.launchable ? context.launchable.items : []
+  const reported = new Set(launchableItems.map((item) => item.deviceId))
+  // a tablet that has sent no icon yet would make every app look service; such a tablet decides nothing
+  const isService = (packageName: string, deviceIds: string[]) => deviceIds.length > 0 && deviceIds.every((deviceId) => reported.has(deviceId)) &&
+    !launchablePackages(launchableItems, deviceIds).has(packageName)
+  const silent = context.state.devices.data.filter((device) => childDevices.includes(device.deviceId) && !reported.has(device.deviceId)).map((device) => device.name)
   const row = (packageName: string, service = isService(packageName, childDevices)) => {
     const rule = rules.get(packageName)
     return {
@@ -191,7 +195,9 @@ const viewApps = (context: ViewContext) => {
     })),
     other: week.filter((item) => !assigned.has(item.packageName)).map((item) => row(item.packageName)),
     appUsageProblem: usageProblem(context),
-    serviceProblem: context.launchable !== undefined && 'problem' in context.launchable ? context.launchable.problem : null
+    serviceProblem: context.launchable !== undefined && 'problem' in context.launchable
+      ? context.launchable.problem
+      : silent.length > 0 ? `${silent.join(', ')} ещё не прислали значки — обновите TimeLimit на этих планшетах` : null
   }
 }
 
