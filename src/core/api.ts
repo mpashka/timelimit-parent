@@ -24,7 +24,15 @@ export interface MailStatus {
   mail: string
   canCreateFamily: boolean
   alwaysPro: boolean
+  /** Who invited this address into a family; absent on a server without invitations. @tag:parent-invitation */
+  invitation?: ReceivedInvitation | null
 }
+
+// @tag:parent-invitation
+export interface ReceivedInvitation { inviterName: string, inviterMail: string }
+
+// @tag:parent-invitation
+export interface ParentInvitation { mail: string, createdAt: number }
 
 export interface AddDeviceToken {
   token: string
@@ -141,6 +149,52 @@ export class TimelimitApi {
         401: 'mail authentication expired or was already used — log in again'
       }
     )
+  }
+
+  // @tag:parent-invitation
+  /** Joins the family that invited this mail; without a password the parent mode on the tablets stays closed to this parent. */
+  async acceptInvitation ({ mailAuthToken, parentName, timeZone, password }: {
+    mailAuthToken: string, parentName: string, timeZone: string, password: ParentPassword | null
+  }): Promise<SessionSignInResult> {
+    return this.post<SessionSignInResult>(
+      '/session/accept-invitation',
+      { mailAuthToken, parentName, timeZone, ...(password ? { parentPassword: password } : {}) },
+      {
+        404: 'this server has no parent invitations (needs the new-ui server branch from tim-136)',
+        409: 'the invitation is gone: the parent who sent it revoked it, or it was already used',
+        401: 'mail authentication expired or was already used — log in again'
+      }
+    )
+  }
+
+  // @tag:parent-invitation
+  async declineInvitation ({ mailAuthToken }: { mailAuthToken: string }): Promise<void> {
+    await this.post('/session/decline-invitation', { mailAuthToken }, { 401: 'mail authentication expired or was already used — log in again' })
+  }
+
+  // @tag:parent-invitation
+  async inviteParent ({ deviceAuthToken, parentId, mail }: { deviceAuthToken: string, parentId: string, mail: string }): Promise<ParentInvitation> {
+    return this.post<ParentInvitation>(
+      '/parent/invite-parent', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', mail },
+      {
+        404: 'this server has no parent invitations (needs the new-ui server branch from tim-136)',
+        409: 'a mail address can belong to one family only — ask the person for another address'
+      }
+    )
+  }
+
+  // @tag:parent-invitation
+  async listParentInvitations ({ deviceAuthToken, parentId }: { deviceAuthToken: string, parentId: string }): Promise<ParentInvitation[]> {
+    const { invitations } = await this.post<{ invitations: ParentInvitation[] }>(
+      '/parent/list-parent-invitations', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device' },
+      { 404: 'this server has no parent invitations (needs the new-ui server branch from tim-136)' }
+    )
+    return invitations
+  }
+
+  // @tag:parent-invitation
+  async revokeParentInvitation ({ deviceAuthToken, parentId, mail }: { deviceAuthToken: string, parentId: string, mail: string }): Promise<void> {
+    await this.post('/parent/revoke-parent-invitation', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', mail }, { 409: 'there is no such invitation: it was answered or revoked already' })
   }
 
   async revokeSession ({ sessionToken }: { sessionToken: string }): Promise<void> {

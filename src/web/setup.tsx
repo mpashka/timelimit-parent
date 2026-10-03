@@ -19,13 +19,13 @@ export function ErrorBox ({ error }: { error: ErrorText | null }) {
     : null
 }
 
-export function PasswordField ({ value, onInput }: { value: string, onInput: (value: string) => void }) {
+export function PasswordField ({ value, onInput, optional = false }: { value: string, onInput: (value: string) => void, optional?: boolean }) {
   const [shown, setShown] = useState(false)
   const ok = value.length >= PARENT_PASSWORD_MIN_LENGTH
   return (
     <>
-      <label>Пароль родителя
-        <input type={shown ? 'text' : 'password'} autocomplete='new-password' required minLength={PARENT_PASSWORD_MIN_LENGTH}
+      <label>Пароль родителя{optional ? ' — можно не задавать' : ''}
+        <input type={shown ? 'text' : 'password'} autocomplete='new-password' required={!optional} minLength={PARENT_PASSWORD_MIN_LENGTH}
           value={value} onInput={(e) => onInput(e.currentTarget.value)} />
       </label>
       <div class='row small'>

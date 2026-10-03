@@ -195,6 +195,15 @@ export interface MailStatus {
   status: 'with family' | 'without family'
   mail: string
   canCreateFamily: boolean
+  invitation?: { inviterName: string, inviterMail: string } | null // @tag:parent-invitation
+}
+
+// @tag:parent-invitation
+export interface ParentsView {
+  parents: Array<{ id: string, name: string, mail: string }>
+  signedInUserId: string
+  invitations: Array<{ mail: string, createdAt: number }>
+  invitationsProblem: string | null
 }
 
 export interface WebConfig { googleClientId?: string, apiUrl?: string }
@@ -261,7 +270,10 @@ export const signIn = {
   mailStatus: (mailAuthToken: string) => call<MailStatus>('/signin/mail-status', { mailAuthToken }),
   session: (mailAuthToken: string) => call<{ userId: string }>('/signin/session', { mailAuthToken }),
   createFamily: (form: { mailAuthToken: string, password: string, parentName: string, timeZone: string }) =>
-    call<{ userId: string }>('/signin/create-family', form)
+    call<{ userId: string }>('/signin/create-family', form),
+  acceptInvitation: (form: { mailAuthToken: string, password: string, parentName: string, timeZone: string }) =>
+    call<{ userId: string }>('/signin/accept-invitation', form),
+  declineInvitation: (mailAuthToken: string) => call<{ ok: true }>('/signin/decline-invitation', { mailAuthToken })
 }
 
 export const signOut = (): Promise<unknown> => call('/signout', {})

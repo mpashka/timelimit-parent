@@ -5,6 +5,7 @@ import { Bans } from './bans.tsx'
 import { clockOf, errorText } from './format.ts'
 import { AppCard, Apps } from './apps.tsx'
 import { Devices } from './devices.tsx'
+import { Parents } from './parents.tsx'
 import { Requests } from './requests.tsx'
 import { Home } from './home.tsx'
 import { CategoryDetails } from './category.tsx'
@@ -29,7 +30,7 @@ const tabs = [
   { path: 'tablets', title: 'Планшеты', also: ['device'] }
 ]
 
-const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', sites: 'sites', apps: 'apps', tablets: 'devices', device: null }
+const screenViews: Record<string, string | null> = { '': 'now', bans: 'bans', sites: 'sites', apps: 'apps', tablets: 'devices', device: null, parents: 'parents' }
 
 const currentRoute = () => location.hash.replace(/^#\/?/, '')
 
@@ -115,7 +116,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   const toastId = useRef(0)
 
   const [requested, argument] = route.split('/')
-  const screen = ['bans', 'sites', 'category', 'device', 'apps', 'app', 'tablets'].includes(requested) ? requested : ''
+  const screen = ['bans', 'sites', 'category', 'device', 'apps', 'app', 'tablets', 'parents'].includes(requested) ? requested : ''
   const kids = family.children
   const child = kids.find((kid) => kid.id === childId) ?? kids[0]
   const viewName = child === undefined ? null : screen === 'category' ? `category/${argument ?? ''}` : screen === 'app' ? `app/${argument ?? ''}` : screenViews[screen] ?? null
@@ -209,6 +210,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
           <summary aria-label='Аккаунт'>⋯</summary>
           <div class='card'>
             <Account parent={parent} serverUrl={family.serverUrl} />
+            <a href='#/parents' onClick={(event) => event.currentTarget.closest('details')?.removeAttribute('open')}>Семья — родители</a>
             <button type='button' class='link' onClick={askToLeave}>Выйти</button>
           </div>
         </details>
@@ -233,6 +235,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
               {screen === 'tablets' ? <Devices /> : null}
               {screen === 'category' ? <CategoryDetails /> : null}
               {screen === 'device' ? <AddDevice serverUrl={family.serverUrl} /> : null}
+              {screen === 'parents' ? <Parents /> : null}
             </>
             )}
       </main>

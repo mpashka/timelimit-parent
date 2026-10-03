@@ -23,6 +23,7 @@ type Step =
   | { name: 'mail' }
   | { name: 'code', mail: string, mailLoginToken: string }
   | { name: 'create', mailAuthToken: string, mail: string }
+  | { name: 'invited', mailAuthToken: string, mail: string, inviterName: string, inviterMail: string, canCreateFamily: boolean }
   | { name: 'closed', mail: string }
 
 export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: string, onSignedIn: () => void }) {
@@ -44,6 +45,9 @@ export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: strin
     if (status.status === 'with family') {
       await signIn.session(mailAuthToken)
       onSignedIn()
+    } else if (status.invitation) {
+      setParentName(status.mail.split('@')[0])
+      setStep({ name: 'invited', mailAuthToken, mail: status.mail, ...status.invitation, canCreateFamily: status.canCreateFamily })
     } else if (status.canCreateFamily) setStep({ name: 'create', mailAuthToken, mail: status.mail })
     else setStep({ name: 'closed', mail: status.mail })
   }
@@ -133,6 +137,30 @@ export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: strin
             <PasswordField value={password} onInput={setPassword} />
             <SubmitButton phase={phase}>Создать семью</SubmitButton>
             <button type='button' class='link' onClick={restart}>Другая почта</button>
+          </form>
+          )
+        : null}
+      {step.name === 'invited'
+        ? (
+          <form onSubmit={attempt(async () => {
+            await signIn.acceptInvitation({
+              mailAuthToken: step.mailAuthToken,
+              password,
+              parentName: parentName.trim(),
+              timeZone: browserTimeZone()
+            })
+            onSignedIn()
+          })}>
+            <p><b>{step.inviterName || step.inviterMail}</b>{step.inviterName && step.inviterMail ? ` (${step.inviterMail})` : ''} приглашает вас в свою семью вторым родителем — с теми же правами.</p>
+            <label>Ваше имя
+              <input required maxLength={50} autocomplete='given-name' value={parentName} onInput={(e) => setParentName(e.currentTarget.value)} />
+            </label>
+            <PasswordField value={password} onInput={setPassword} optional />
+            <SubmitButton phase={phase}>Войти в семью</SubmitButton>
+            <button type='button' class='link' onClick={attempt(async () => {
+              await signIn.declineInvitation(step.mailAuthToken)
+              setStep(step.canCreateFamily ? { name: 'mail' } : { name: 'closed', mail: step.mail })
+            })}>Отказаться</button>
           </form>
           )
         : null}

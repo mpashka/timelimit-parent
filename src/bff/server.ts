@@ -9,7 +9,7 @@ import { BadRequestError, buildIntent } from './intents.ts'
 import { type BffStore, type StoredSession } from './store.ts'
 import { usageDays } from '../core/apps.ts'
 import { findChild } from '../core/overview.ts'
-import { buildView, needsAppUsage, needsLabels, type ViewContext, visiblePackages } from './views.ts'
+import { buildView, needsAppUsage, needsInvitations, needsLabels, type ViewContext, visiblePackages } from './views.ts'
 import { type AppLabel, mergeAppLabels } from '../core/apps.ts'
 import { APP_ICONS_API_LEVEL } from '../core/protocol.ts'
 import { iconPath, PlayCatalog } from './app-labels.ts'
@@ -153,6 +153,25 @@ export class Bff {
       response.setHeader('Set-Cookie', cookie(COOKIE_NAME, stored.cookieId))
       return send(response, 200, { userId: stored.userId, familyId: stored.familyId })
     }
+    // @tag:parent-invitation
+    if (step === 'accept-invitation') {
+      const password = typeof body.password === 'string' && body.password !== '' ? body.password : null
+      if (password !== null && password.length < PARENT_PASSWORD_MIN_LENGTH) {
+        throw new BadRequestError(`the parent password must have at least ${PARENT_PASSWORD_MIN_LENGTH} characters, or none at all`)
+      }
+      const stored = this.store.createSession(await this.api.acceptInvitation({
+        mailAuthToken: requireString(body, 'mailAuthToken'),
+        parentName: requireString(body, 'parentName'),
+        timeZone: requireString(body, 'timeZone'),
+        password: password === null ? null : await hashParentPassword(password)
+      }))
+      response.setHeader('Set-Cookie', cookie(COOKIE_NAME, stored.cookieId))
+      return send(response, 200, { userId: stored.userId, familyId: stored.familyId })
+    }
+    if (step === 'decline-invitation') {
+      await this.api.declineInvitation({ mailAuthToken: requireString(body, 'mailAuthToken') })
+      return send(response, 200, { ok: true })
+    }
     if (step === 'session') {
       const result = await this.api.signInSession({ mailAuthToken: requireString(body, 'mailAuthToken') })
       const stored = this.store.createSession(result)
@@ -184,6 +203,7 @@ export class Bff {
     const context = this.viewContext(session, state, url, request)
     if (needsAppUsage(name)) context.appUsage = await this.appUsageOf(session, context)
     if (needsLabels(name)) context.labels = await this.labelsOf(session, context, name)
+    if (needsInvitations(name)) context.invitations = await this.invitationsOf(session)
     const data = buildView(name, context)
     send(response, 200, staleSince === undefined ? { data } : { data, staleSince })
   }
@@ -193,6 +213,11 @@ export class Bff {
     const body = await readJson(request)
     const result = await this.serial(session.cookieId, async () => {
       const client = this.clientFor(session)
+      // @tag:parent-invitation
+      // приглашение — не действие синхронизации, а отдельная ручка сервера
+      if (name === 'invite-parent') await client.inviteParent(requireString(body, 'mail'))
+      if (name === 'revoke-invitation') await client.revokeParentInvitation(requireString(body, 'mail'))
+      if (name === 'invite-parent' || name === 'revoke-invitation') return client.sync()
       const state = await client.sync()
       const actions = buildIntent(name, { state, now: this.now() }, body)
       const pushed = await client.push(actions)
@@ -206,6 +231,7 @@ export class Bff {
     if (typeof body.child === 'string') context.childId = body.child
     if (needsAppUsage(view)) context.appUsage = await this.appUsageOf(session, context)
     if (needsLabels(view)) context.labels = await this.labelsOf(session, context, view)
+    if (needsInvitations(view)) context.invitations = await this.invitationsOf(session)
     send(response, 200, { data: buildView(view, context) })
   }
 
@@ -319,6 +345,16 @@ export class Bff {
    * without any action of ours, so the poll tightens — the one case the browser used to poll
    * every five seconds for.
    */
+  // @tag:parent-invitation
+  private async invitationsOf (session: StoredSession): Promise<ViewContext['invitations']> {
+    try {
+      return { items: await this.clientFor(session).parentInvitations() }
+    } catch (error) {
+      const { failure } = describeFailure(error)
+      return { problem: failure.hint ? `${failure.title} — ${failure.hint}` : failure.title }
+    }
+  }
+
   private async handleAddDeviceToken (request: IncomingMessage, response: ServerResponse): Promise<void> {
     const session = this.requireSession(request)
     const token = await this.serial(session.cookieId, () => this.clientFor(session).createAddDeviceToken())

@@ -35,7 +35,7 @@ const status: Record<FailureKind, number> = {
 }
 
 /** Endpoints that authenticate a mail confirmation rather than a session. */
-const MAIL_AUTH_ENDPOINTS = ['/auth/', '/parent/sign-in-into-family', '/parent/get-status-by-mail-address', '/parent/create-family', '/session/sign-in']
+const MAIL_AUTH_ENDPOINTS = ['/auth/', '/parent/sign-in-into-family', '/parent/get-status-by-mail-address', '/parent/create-family', '/session/sign-in', '/session/accept-invitation', '/session/decline-invitation']
 
 /** The browser has no usable parent session: no cookie, or the row behind it is gone. */
 export class SessionGoneError extends ParentConsoleError {
@@ -53,6 +53,7 @@ function kindOf (error: unknown): FailureKind {
       return MAIL_AUTH_ENDPOINTS.some((prefix) => error.endpoint.startsWith(prefix)) ? 'mail-auth-expired' : 'session-gone'
     }
     if (error.status === 404 || error.status === 501) return 'not-supported'
+    if (error.status === 409) return 'sync-rejected'
     return 'internal'
   }
   if (error instanceof ParentConsoleError) {

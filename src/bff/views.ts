@@ -1,4 +1,4 @@
-import type { AppUsageItem } from '../core/api.ts'
+import type { AppUsageItem, ParentInvitation } from '../core/api.ts'
 import { appCard, type AppLabels, appTimes, appTitle, deviceStatus, launchablePackages, newApps, packageOf, usageDays } from '../core/apps.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import { dailyLimitRules } from '../core/operations.ts'
@@ -39,7 +39,12 @@ export interface ViewContext {
   appUsage?: { items: AppUsageItem[] } | { problem: string }
   /** Names and icons from Google Play and the tablets, for the views that show apps. */
   labels?: AppLabels
+  /** Addresses invited into the family and not answered yet; `problem` says why the list is missing. */
+  invitations?: { items: ParentInvitation[] } | { problem: string }
 }
+
+// @tag:parent-invitation
+export const needsInvitations = (name: string): boolean => name === 'parents'
 
 /** Views that need `/parent/get-app-usage`; the server answers it separately from the sync status. */
 export const USAGE_VIEWS = ['now', 'apps', 'devices']
@@ -293,6 +298,14 @@ const viewFamily = (context: ViewContext) => ({
   message: context.state.message
 })
 
+// @tag:parent-invitation
+const viewParents = (context: ViewContext) => ({
+  parents: parents(context.state).map(({ id, name, mail }) => ({ id, name, mail })),
+  signedInUserId: context.signedInUserId,
+  invitations: context.invitations && 'items' in context.invitations ? context.invitations.items : [],
+  invitationsProblem: context.invitations && 'problem' in context.invitations ? context.invitations.problem : null
+})
+
 const views: Record<string, (context: ViewContext) => unknown> = {
   now: viewNow,
   bans: viewBans,
@@ -301,7 +314,8 @@ const views: Record<string, (context: ViewContext) => unknown> = {
   apps: viewApps,
   devices: viewDevices,
   code: viewCode,
-  family: viewFamily
+  family: viewFamily,
+  parents: viewParents
 }
 
 export function buildView (name: string, context: ViewContext): unknown {

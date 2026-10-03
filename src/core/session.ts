@@ -1,4 +1,4 @@
-import { type AddDeviceToken, APP_ICONS_PER_REQUEST, type AppIconItem, type AppUsageItem, type TimelimitApi } from './api.ts'
+import { type AddDeviceToken, APP_ICONS_PER_REQUEST, type AppIconItem, type AppUsageItem, type ParentInvitation, type TimelimitApi } from './api.ts'
 import { ParentConsoleError } from './errors.ts'
 import type { ParentAction, PushActionItem } from './protocol.ts'
 import { createEmptyState, type FamilyState, findParentOfDevice, mergeServerStatus, toClientStatus } from './state.ts'
@@ -118,6 +118,24 @@ export class SyncClient {
   async createAddDeviceToken (): Promise<AddDeviceToken> {
     const parentId = this.parentUserId(await this.sync())
     return this.api.createAddDeviceToken({ deviceAuthToken: this.subject.authToken, parentId })
+  }
+
+  // @tag:parent-invitation
+  async inviteParent (mail: string): Promise<ParentInvitation> {
+    const parentId = this.parentUserId(await this.sync())
+    return this.api.inviteParent({ deviceAuthToken: this.subject.authToken, parentId, mail })
+  }
+
+  // @tag:parent-invitation
+  async parentInvitations (): Promise<ParentInvitation[]> {
+    const parentId = this.parentUserId(await this.loadCachedState())
+    return this.api.listParentInvitations({ deviceAuthToken: this.subject.authToken, parentId })
+  }
+
+  // @tag:parent-invitation
+  async revokeParentInvitation (mail: string): Promise<void> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.revokeParentInvitation({ deviceAuthToken: this.subject.authToken, parentId, mail })
   }
 
   /** Removes the device from the family: its token stops working, the child it was assigned to keeps its settings. */

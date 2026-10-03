@@ -18,7 +18,8 @@ function fakeServer ({ unreachable = false } = {}) {
     const body = JSON.parse(String(init.body))
     calls.push({ path, body })
     if (broken) throw new TypeError('fetch failed')
-    if (path === '/session/sign-in' || path === '/session/create-family') return Response.json({ sessionToken: 's:' + 'a'.repeat(32), sessionId: 'sess01', familyId: 'fam1', userId: 'parnt1' })
+    if (path === '/parent/list-parent-invitations') return Response.json({ invitations: calls.some((c) => c.path === '/parent/invite-parent') ? [{ mail: 'mama@example.com', createdAt: 1 }] : [] })
+    if (path === '/session/sign-in' || path === '/session/create-family' || path === '/session/accept-invitation') return Response.json({ sessionToken: 's:' + 'a'.repeat(32), sessionId: 'sess01', familyId: 'fam1', userId: 'parnt1' })
     if (path === '/sync/pull-status') return Response.json(body.status.users === '' ? fullStatus() : { apiLevel: 11, fullVersion: 1 })
     if (path === '/sync/push-actions') return Response.json({ shouldDoFullSync: false })
     return Response.json({})
@@ -97,6 +98,22 @@ test('an intent turns into protocol actions and answers with the fresh view', as
   const actions = pushed.body.actions.map((item: any) => JSON.parse(item.encodedAction).type)
   assert.ok(actions.includes('INCREMENT_CATEGORY_EXTRATIME'), `unexpected actions: ${actions.join(', ')}`)
   assert.equal(pushed.body.actions[0].userId, 'parnt1')
+})
+
+// @tag:parent-invitation
+test('accepting an invitation opens a session without a password, inviting answers with the fresh family', async () => {
+  const server = fakeServer()
+  const { bff, call } = await startBff(server)
+  after(() => bff.close())
+
+  const accepted = await call('/signin/accept-invitation', { mailAuthToken: 'mail-token', password: '', parentName: 'Мама', timeZone: 'Europe/Moscow' })
+  assert.equal(accepted.status, 200)
+  assert.equal('parentPassword' in server.calls.find((c) => c.path === '/session/accept-invitation')!.body, false)
+
+  const invited = await call('/intent/invite-parent', { mail: 'mama@example.com', view: 'parents' })
+  assert.equal(invited.status, 200, JSON.stringify(invited.body))
+  assert.deepEqual(invited.body.data.invitations, [{ mail: 'mama@example.com', createdAt: 1 }])
+  assert.equal(server.calls.some((c) => c.path === '/sync/push-actions'), false, 'an invitation is no sync action')
 })
 
 test('no session means session-gone, not a bare 401', async () => {
