@@ -8,6 +8,13 @@ import type { ServerTimeLimitRule } from './protocol.generated.ts'
  * names this client has always used. Everything below the type block is ours.
  */
 export type {
+  AddDeviceResponse as SignInResult,
+  StatusOfMailAddressResponse as MailStatus,
+  MailAddressStatus,
+  ReceivedParentInvitation as ReceivedInvitation,
+  OwnFamily,
+  CreateAddDeviceTokenResponse as AddDeviceToken,
+  ParentSessionInfo as SessionSignInResult,
   ClientDataStatus,
   ClientPushChangesRequestAction as PushActionItem,
   SerializedInstalledApp as InstalledApp,

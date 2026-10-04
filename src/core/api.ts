@@ -1,49 +1,23 @@
 import { ApiError, ParentConsoleError } from './errors.ts'
 import type { ParentPassword } from './password.ts'
 import type { AdultRole } from '../shared/adult-role.ts'
-import type { ClientDataStatus, PushActionItem, ServerDataStatus } from './protocol.ts'
+import type {
+  AddDeviceToken, ClientDataStatus, MailStatus, PushActionItem, ServerDataStatus, SessionSignInResult, SignInResult
+} from './protocol.ts'
 
 // @tag:parent-console
 
 export const DEFAULT_SERVER_URL = 'https://child-time.pasha-home.ru'
 
-export interface SignInResult {
-  deviceAuthToken: string
-  ownDeviceId: string
-  data: ServerDataStatus
-}
-
-export interface SessionSignInResult {
-  sessionToken: string
-  sessionId: string
-  familyId: string
-  userId: string
-}
-
-export interface MailStatus {
-  status: 'with family' | 'without family'
-  mail: string
-  canCreateFamily: boolean
-  alwaysPro: boolean
-  /** Who invited this address into a family; absent on a server without invitations. @tag:parent-invitation */
-  invitation?: ReceivedInvitation | null
-  /** The invited address's own family, given only with an invitation. @tag:adult-role */
-  ownFamily?: OwnFamily | null
-}
-
-// @tag:parent-invitation
-export interface ReceivedInvitation { inviterName: string, inviterMail: string, role?: AdultRole }
-
-// @tag:adult-role
-export interface OwnFamily { children: number, devices: number, adults: number }
+/*
+ * The server's answers are not written out here: they are generated from its schemas into
+ * protocol.generated.ts and renamed in protocol.ts. An answer the server has not named yet stays
+ * hand-written below — today that is ParentInvitation and the `{ items }` envelopes.
+ */
+export type { AddDeviceToken, MailStatus, OwnFamily, ReceivedInvitation, SessionSignInResult, SignInResult } from './protocol.ts'
 
 // @tag:parent-invitation
 export interface ParentInvitation { mail: string, createdAt: number, role?: AdultRole }
-
-export interface AddDeviceToken {
-  token: string
-  deviceId: string
-}
 
 /** Server worker `delete-old-tokens` removes add-device tokens and mail auth tokens older than this. */
 export const TOKEN_LIFETIME_MS = 3 * 60 * 60 * 1000

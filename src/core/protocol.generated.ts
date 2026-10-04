@@ -1,6 +1,6 @@
 /*
  * Generated from the sync server's own schemas by scripts/protocol-types.mjs — do not edit.
- * Source: timelimit-server/docs/schema/{ServerDataStatus,ClientPullChangesRequest,ClientPushChangesRequest,SerializedParentAction}.schema.json, which the server
+ * Source: timelimit-server/docs/schema/{AddDeviceResponse,StatusOfMailAddressResponse,CreateAddDeviceTokenResponse,ParentSessionInfo,ClientPullChangesRequest,ClientPushChangesRequest,SerializedParentAction}.schema.json, which the server
  * generates from src/api/schema.ts and uses to validate requests (additionalProperties: false).
  * Regenerate with `npm run protocol:types`; `npm test` and `npm run build` fail when this
  * file no longer matches the schemas.
@@ -9,6 +9,8 @@
  */
 
 // @tag:parent-console
+
+export type AdultRole = 'admin' | 'manager' | 'member'
 
 export type AppRecommendation = 'blacklist' | 'none' | 'whitelist'
 
@@ -64,9 +66,23 @@ export interface EncryptableParentPassword {
   encrypted?: boolean
 }
 
+export type MailAddressStatus = 'with family' | 'without family'
+
 export type NewPermissionStatus = 'granted' | 'not granted' | 'not supported'
 
+export interface OwnFamily {
+  children: number
+  devices: number
+  adults: number
+}
+
 export type ProtectionLevel = 'device owner' | 'none' | 'password device admin' | 'simple device admin'
+
+export interface ReceivedParentInvitation {
+  inviterName: string
+  inviterMail: string
+  role: AdultRole
+}
 
 export type RuntimePermissionStatus = 'granted' | 'not granted' | 'not required'
 
@@ -508,6 +524,28 @@ export interface ServerCryptContainer {
   data: string
 }
 
+export interface ServerDataStatus {
+  devices?: ServerDeviceList
+  devices2?: Array<ServerExtendedDeviceData>
+  apps?: Array<ServerInstalledAppsData>
+  rmCategories?: Array<string>
+  categoryBase?: Array<ServerUpdatedCategoryBaseData>
+  categoryApp?: Array<ServerUpdatedCategoryAssignedApps>
+  usedTimes?: Array<ServerUpdatedCategoryUsedTimes>
+  rules?: Array<ServerUpdatedTimeLimitRules>
+  tasks?: Array<ServerUpdatedCategoryTasks>
+  users?: ServerUserList
+  krq?: Array<ServerKeyRequest>
+  kr?: Array<ServerKeyResponse>
+  pings?: Array<ServerPing>
+  deviceStates?: Array<ServerDeviceState>
+  dh?: ServerDhKey
+  u2f?: U2fData
+  fullVersion: number
+  message?: string
+  apiLevel: number
+}
+
 export interface ServerDeviceData {
   deviceId: string
   name: string
@@ -749,26 +787,33 @@ export interface UrlFilter {
   block: Array<string>
 }
 
-export interface ServerDataStatus {
-  devices?: ServerDeviceList
-  devices2?: Array<ServerExtendedDeviceData>
-  apps?: Array<ServerInstalledAppsData>
-  rmCategories?: Array<string>
-  categoryBase?: Array<ServerUpdatedCategoryBaseData>
-  categoryApp?: Array<ServerUpdatedCategoryAssignedApps>
-  usedTimes?: Array<ServerUpdatedCategoryUsedTimes>
-  rules?: Array<ServerUpdatedTimeLimitRules>
-  tasks?: Array<ServerUpdatedCategoryTasks>
-  users?: ServerUserList
-  krq?: Array<ServerKeyRequest>
-  kr?: Array<ServerKeyResponse>
-  pings?: Array<ServerPing>
-  deviceStates?: Array<ServerDeviceState>
-  dh?: ServerDhKey
-  u2f?: U2fData
-  fullVersion: number
-  message?: string
-  apiLevel: number
+export interface AddDeviceResponse {
+  deviceAuthToken: string
+  ownDeviceId: string
+  data: ServerDataStatus
+}
+
+export interface StatusOfMailAddressResponse {
+  status: MailAddressStatus
+  mail: string
+  canCreateFamily: boolean
+  alwaysPro: boolean
+  /** Absent on a server without parent invitations, null when nobody invited this address. @tag:parent-invitation */
+  invitation?: ReceivedParentInvitation | null
+  /** The invited address's own family, given only together with an invitation. @tag:adult-role */
+  ownFamily?: OwnFamily | null
+}
+
+export interface CreateAddDeviceTokenResponse {
+  token: string
+  deviceId: string
+}
+
+export interface ParentSessionInfo {
+  sessionToken: string
+  sessionId: string
+  familyId: string
+  userId: string
 }
 
 export interface ClientPullChangesRequest {

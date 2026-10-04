@@ -10,9 +10,16 @@ const output = join(root, 'src/core/protocol.generated.ts')
 const serverDir = resolve(root, process.env.TIMELIMIT_SERVER_DIR ?? '../timelimit-server')
 const schemaDir = join(serverDir, 'docs/schema')
 
-// Every wire type this client reads or sends hangs off one of these four; the server generates
-// them from src/api/schema.ts and validates requests against the same schemas.
-const roots = ['ServerDataStatus', 'ClientPullChangesRequest', 'ClientPushChangesRequest', 'SerializedParentAction']
+// Every wire type this client reads or sends hangs off one of these; the server generates them from
+// src/api/schema.ts and validates requests against the same schemas. A root may not be a definition
+// of another root, so ServerDataStatus is not listed: it arrives as a definition of AddDeviceResponse.
+// A server answer joins this list once it has a name on the server — an interface in
+// src/object/apiresponse.ts, re-exported from src/api/schema.ts and listed in docOnlyTypes of
+// scripts/build-schemas.js.
+const roots = [
+  'AddDeviceResponse', 'StatusOfMailAddressResponse', 'CreateAddDeviceTokenResponse', 'ParentSessionInfo',
+  'ClientPullChangesRequest', 'ClientPushChangesRequest', 'SerializedParentAction'
+]
 
 const header = `/*
  * Generated from the sync server's own schemas by scripts/protocol-types.mjs — do not edit.
@@ -83,7 +90,7 @@ function typeOf (schema, path) {
     return schema.enum.map(quoted).join(' | ')
   }
   switch (schema.type) {
-    case 'string': case 'number': case 'boolean':
+    case 'string': case 'number': case 'boolean': case 'null':
       return schema.type
     case 'array':
       if (schema.items === undefined) throw new Error(`${path}: array without items`)
