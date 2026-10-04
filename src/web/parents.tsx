@@ -5,7 +5,7 @@ import { googleClientIdOf, type ParentsView, signIn } from './api.ts'
 import { errorText, type ErrorText } from './format.ts'
 import { ErrorBox } from './setup.tsx'
 import { GoogleButton } from './signin.tsx'
-import { ActionButton, RowMenu, SubmitButton, useApp, useBusy, useScreen, type Work } from './ui.tsx'
+import { ActionButton, RowMenu, SubmitButton, useBusy, useFamily, useScreen, type Work } from './ui.tsx'
 
 // @tag:parent-invitation @tag:adult-role
 
@@ -36,13 +36,13 @@ const changeRole = (adult: Adult, role: AdultRole) => (): Work => ({
 })
 
 export function Parents () {
-  const { role, family } = useApp()
+  const { role, family } = useFamily()
   const view = useScreen<ParentsView>()
   const [mail, setMail] = useState('')
   const [inviteRole, setInviteRole] = useState<AdultRole>('manager')
   const [renaming, setRenaming] = useState<{ adult: Adult, draft: string } | null>(null)
   const [confirming, setConfirming] = useState<{ adult: Adult, leaving: boolean } | null>(null)
-  const { run, pending } = useApp()
+  const { run, pending } = useFamily()
   const admin = role === 'admin'
   const me = view.signedInUserId
   return (
@@ -127,7 +127,7 @@ export function Parents () {
 
 /** The same check as a tablet name: the server keeps an adult's name in the same column. */
 function AdultNameForm ({ adult, draft, setDraft }: { adult: Adult, draft: string, setDraft: (draft: string | null) => void }) {
-  const { run } = useApp()
+  const { run } = useFamily()
   const [phase, wrap] = useBusy()
   const problem = labelProblem(draft)
   const unchanged = draft.trim() === adult.name
@@ -166,7 +166,7 @@ const DELETE_WORD = 'удалить'
  * and the admin's own mail confirmed again — rule UX core 26.
  */
 export function DeleteFamily () {
-  const { role, family, run } = useApp()
+  const { role, family, run } = useFamily()
   const me = family.parents.find((adult) => adult.id === family.signedInUserId)
   const [word, setWord] = useState('')
   const [code, setCode] = useState<{ mailLoginToken: string, value: string } | null>(null)

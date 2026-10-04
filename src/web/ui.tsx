@@ -21,9 +21,8 @@ export interface Work extends IntentCall {
   undo?: (fresh: unknown) => IntentCall
 }
 
-export interface AppContext {
+export interface FamilyContext {
   family: FamilyView
-  child: Person
   now: number
   view: unknown
   pending: { key: string, waiting: boolean } | null
@@ -33,11 +32,20 @@ export interface AppContext {
   role: AdultRole
 }
 
-export const App = createContext<AppContext>(null as unknown as AppContext)
-export const useApp = (): AppContext => useContext(App)
+export interface AppContext extends FamilyContext {
+  child: Person
+}
 
-/** The data of the screen's own view; every screen knows which one it asked for. */
-export const useScreen = <V, >(): V => useApp().view as V
+/** «Семья» works in a family with no children yet; every other screen is about a child. */
+export const App = createContext<FamilyContext & { child?: Person }>(null as unknown as AppContext)
+export const useFamily = (): FamilyContext => useContext(App)
+export const useApp = (): AppContext => {
+  const context = useContext(App)
+  if (context.child === undefined) throw new Error('this screen needs a child')
+  return { ...context, child: context.child }
+}
+
+export const useScreen = <V, >(): V => useFamily().view as V
 
 export interface ViewState<V> {
   data: V | null
@@ -112,7 +120,7 @@ export function useBusy (): [phase: 'idle' | 'pressed' | 'waiting', wrap: (work:
 }
 
 function useWork (): [mine: boolean, waiting: boolean, start: (work: () => Work) => void] {
-  const { pending, run, showError } = useApp()
+  const { pending, run, showError } = useFamily()
   const [key, setKey] = useState<string | null>(null)
   const mine = pending !== null && pending.key === key
   const start = (work: () => Work) => {

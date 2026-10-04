@@ -120,7 +120,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   const screen = ['bans', 'sites', 'category', 'device', 'apps', 'app', 'tablets', 'parents', 'family-delete'].includes(requested) ? requested : ''
   const kids = family.children
   const child = kids.find((kid) => kid.id === childId) ?? kids[0]
-  const viewName = child === undefined ? null : screen === 'category' ? `category/${argument ?? ''}` : screen === 'app' ? `app/${argument ?? ''}` : screenViews[screen] ?? null
+  const viewName = child === undefined && screenViews[screen] !== 'parents' ? null : screen === 'category' ? `category/${argument ?? ''}` : screen === 'app' ? `app/${argument ?? ''}` : screenViews[screen] ?? null
   const screenView = useView<unknown>(viewName, child?.id, revision)
   const latest = useRef<unknown>(null)
   latest.current = screenView.data
@@ -133,7 +133,10 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   useEffect(() => { setToast((current) => current?.kind === 'done' ? null : current) }, [route])
   const parent = family.parents.find((person) => person.id === family.signedInUserId)
   const role = roleOf(parent)
-  useEffect(() => { document.body.classList.toggle('read-only', role === 'member') }, [role])
+  useEffect(() => {
+    document.body.classList.toggle('read-only', role === 'member')
+    return () => document.body.classList.remove('read-only')
+  }, [role])
 
   const showError = (ex: unknown) => {
     const text = errorText(ex)
@@ -177,12 +180,19 @@ function Console ({ family, familyStale, revision, reload, leave }: {
   }
 
   if (!child) {
+    const familyScreen = screen === 'parents' || screen === 'family-delete'
     return (
-      <main class='page signin'>
-        <AddChildForm run={run} />
-        <button type='button' class='link' onClick={() => void leave()}>Выйти</button>
-        <Toast toast={toast} close={() => setToast(null)} />
-      </main>
+      <App.Provider value={{ family, now, view: screenView.data, pending, run, showError, role }}>
+        <main class='page signin'>
+          {familyScreen && screenView.data === null ? <p class='muted'>{screenView.problem ?? 'Загружаем…'}</p> : null}
+          {screen === 'parents' && screenView.data !== null ? <Parents /> : null}
+          {screen === 'family-delete' && screenView.data !== null ? <DeleteFamily /> : null}
+          {familyScreen ? null : role === 'member' ? <p>В семье пока нет детей — добавит их управляющий или админ.</p> : <AddChildForm run={run} />}
+          <p>{familyScreen ? <a href='#/'>← Назад</a> : <a href='#/parents'>Семья</a>}</p>
+          <button type='button' class='link' onClick={() => void leave()}>Выйти</button>
+          <Toast toast={toast} close={() => setToast(null)} />
+        </main>
+      </App.Provider>
     )
   }
 
