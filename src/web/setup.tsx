@@ -60,7 +60,7 @@ export function AddChildForm ({ run }: { run: (work: Work) => Promise<boolean> }
 
 type TokenState = { name: 'loading' } | { name: 'failed', error: ErrorText } | { name: 'shown', token: AddDeviceToken, expiresAt: number }
 
-export function AddDevice ({ serverUrl }: { serverUrl: string }) {
+export function AddDevice () {
   const { family, child } = useApp()
   const [token, setToken] = useState<TokenState>({ name: 'loading' })
   const [now, setNow] = useState(Date.now())
@@ -117,7 +117,6 @@ export function AddDevice ({ serverUrl }: { serverUrl: string }) {
             <p class='muted small'>Код действует ещё {formatCountdown(token.expiresAt - now)} и только один раз. Новый код отменяет этот.</p>
             <ol class='steps'>
               <li>Установите TimeLimit на детское устройство и откройте.</li>
-              <li>На первом экране — «select custom server», адрес <code>{serverUrl}</code>.</li>
               <li>«connected mode» → «Code from another TimeLimit installation».</li>
               <li>Введите слова кода — регистр не важен.</li>
             </ol>

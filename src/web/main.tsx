@@ -252,7 +252,7 @@ function Console ({ family, familyStale, revision, reload, leave }: {
               {screen === 'app' ? <AppCard /> : null}
               {screen === 'tablets' ? <Devices /> : null}
               {screen === 'category' ? <CategoryDetails /> : null}
-              {screen === 'device' ? <AddDevice serverUrl={family.serverUrl} /> : null}
+              {screen === 'device' ? <AddDevice /> : null}
               {screen === 'parents' ? <Parents /> : null}
               {screen === 'family-delete' ? <DeleteFamily /> : null}
             </>
