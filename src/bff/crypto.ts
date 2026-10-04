@@ -1,12 +1,15 @@
 import { createDecipheriv, createHash, createPrivateKey, createPublicKey, diffieHellman, generateKeyPairSync, type KeyObject, randomBytes, sign as edSign, verify as edVerify } from 'node:crypto'
 import { inflateSync } from 'node:zlib'
 
-// @tag:parent-console
+// @tag:app-list-crypto @tag:parent-console
 
 /**
  * Everything TimeLimit's key exchange and container encryption need, on `node:crypto` alone —
  * curve25519 signatures the way libsignal makes them, X25519 agreement, AES-GCM containers.
  * Node-only: nothing here ever reaches the browser.
+ *
+ * Nothing calls this yet: reading the encrypted app list was decided against — the reasons and the
+ * price of coming back are in docs/implementation/app-list-crypto.md of the wrapper repository.
  */
 
 /** A device signing key: `seed` signs, `publicKey` is the Montgomery key uploaded to the family. */

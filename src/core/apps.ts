@@ -38,8 +38,8 @@ export function mergeAppLabels (play: AppLabels, tablet: AppLabels): Map<string,
 
 /**
  * The name to show for a package: from `labels` (Play, then the tablet), then the title a new app
- * arrived with, and only then the package name — the full app list is encrypted
- * (docs/requests/web-admin-app-list/).
+ * arrived with, and only then the package name — the full app list is encrypted and we decided not
+ * to read it (docs/implementation/app-list-crypto.md).
  */
 export function appTitle (state: FamilyState, packageName: string, labels: AppLabels): string {
   const labelled = labels.get(packageName)?.title
