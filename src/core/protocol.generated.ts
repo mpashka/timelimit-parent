@@ -757,6 +757,7 @@ export interface ServerUserEntry {
   pbd?: number
   urlFilter?: UrlFilter
   adultRole?: 'admin' | 'manager' | 'member'
+  childMail?: string
   requests?: Array<ServerChildRequest>
   appAllowances?: Array<ServerAppAllowance>
   appRules?: Array<ServerAppRule>
