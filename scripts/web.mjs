@@ -78,6 +78,7 @@ const MOCK_ICONS = {
 
 let mockDeviceTokenAt = 0
 let mockFamilyWithoutChild = false
+let mockChildMail = null // @tag:family-join-google
 
 function hideChildren (fixture) {
   fixture.users = { version: 'no-child', data: fixture.users.data.filter((u) => u.type !== 'child') }
@@ -105,6 +106,8 @@ function mockApi (fullStatus, path, body) {
   kid.appRules = [{ packageName: 'com.roblox.client', days: 96, limitMinutes: -1, usedDay: 0, usedMs: 0 }]
   kid.newApps = [{ packageName: 'com.robtopx.geometryjump', title: 'Geometry Dash', section: 'game', installedAt: Date.now() - 75 * 60000, deviceId: 'devC01' }]
   fixture.deviceStates = [{ deviceId: 'devC01', seen: Date.now() - 20000, app: 'com.game', appSince: Date.now() - 600000 }]
+  if (mockChildMail) Object.assign(kid, { childMail: mockChildMail })
+  if (mockChildMail) fixture.users.version = `mail-${mockChildMail}`
   if (mockFamilyWithoutChild) hideChildren(fixture)
   // @tag:adult-role
   fixture.users.data.find((u) => u.id === 'parnt1').adultRole = process.env.TIMELIMIT_MOCK_ROLE ?? 'admin'
@@ -152,6 +155,16 @@ function mockApi (fullStatus, path, body) {
     }
     case '/parent/get-app-icons':
       return { items: body.packageNames.filter((name) => MOCK_ICONS[name]).map((packageName) => ({ packageName, ...MOCK_ICONS[packageName] })) }
+    // @tag:family-join-google
+    case '/parent/set-child-mail':
+      if (body.mail === 'taken@example.com') return [409, '<pre>mail is already linked to another child</pre>']
+      mockChildMail = body.mail
+      return { ok: true }
+    case '/auth/join-preview':
+      if (body.idToken === 'unlinked') return [404, '<pre>mail is not linked to any child</pre>']
+      return { familyName: 'Мухатаевы', childName: kid.name }
+    case '/auth/join':
+      return { ok: true }
     case '/sync/push-actions':
       for (const item of body.actions) console.log('push', item.sequenceNumber, item.encodedAction)
       if (body.actions.some((item) => JSON.parse(item.encodedAction).type === 'ADD_USER')) mockFamilyWithoutChild = false

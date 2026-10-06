@@ -23,6 +23,7 @@ function fakeServer ({ unreachable = false, role }: { unreachable?: boolean, rol
     if (path === '/sync/pull-status') return Response.json(body.status.users === '' ? withRole(fullStatus(), role) : { apiLevel: 11, fullVersion: 1 })
     if (path === '/sync/push-actions') return Response.json({ shouldDoFullSync: false })
     if (path === '/auth/sign-in-by-google') return Response.json({ mailAuthToken: 'mail-token' })
+    if (path === '/auth/join-preview') return Response.json({ familyName: 'Мухатаевы', childName: 'Тихон' })
     return Response.json({})
   }) as typeof fetch
   return { calls, api: new TimelimitApi({ serverUrl: 'https://server.test', fetchImpl }), break: (value: boolean) => { broken = value } }
@@ -120,6 +121,24 @@ test('accepting an invitation opens a session without a password, inviting answe
   assert.equal(invited.status, 200, JSON.stringify(invited.body))
   assert.deepEqual(invited.body.data.invitations, [{ mail: 'mama@example.com', createdAt: 1 }])
   assert.equal(server.calls.some((c) => c.path === '/sync/push-actions'), false, 'an invitation is no sync action')
+})
+
+// @tag:family-join-google
+test('only an admin links a child\'s Google account, and the child\'s tablet joins without a session', async () => {
+  const server = fakeServer({ role: 'manager' })
+  const { bff, call } = await startBff(server)
+  after(() => bff.close())
+
+  const preview = await call('/join/preview', { idToken: 'child-id-token' })
+  assert.deepEqual(preview.body, { familyName: 'Мухатаевы', childName: 'Тихон' })
+  const joined = await call('/join/confirm', { idToken: 'child-id-token', registerToken: 'abc' })
+  assert.equal(joined.status, 200)
+  assert.deepEqual(server.calls.find((c) => c.path === '/auth/join')!.body, { idToken: 'child-id-token', registerToken: 'abc' })
+
+  await call('/signin/session', { mailAuthToken: 'mail-token' })
+  const refused = await call('/intent/child-mail', { child: 'child1', mail: 'tikhon@gmail.com' })
+  assert.equal(refused.status, 409)
+  assert.equal(server.calls.some((c) => c.path === '/parent/set-child-mail'), false)
 })
 
 // @tag:adult-role

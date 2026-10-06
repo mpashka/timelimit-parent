@@ -133,6 +133,12 @@ export class SyncClient {
     await this.api.setAdultRole({ deviceAuthToken: this.subject.authToken, parentId, userId, role })
   }
 
+  // @tag:family-join-google
+  async setChildMail (childUserId: string, mail: string | null): Promise<void> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.setChildMail({ deviceAuthToken: this.subject.authToken, parentId, childUserId, mail })
+  }
+
   // @tag:adult-role
   async removeAdult (userId: string): Promise<void> {
     const parentId = this.parentUserId(await this.sync())

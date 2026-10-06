@@ -18,6 +18,7 @@ export interface Person {
   timeZone: string
   disableLimitsUntil: number
   adultRole?: AdultRole // @tag:adult-role
+  childMail?: string // @tag:family-join-google
 }
 
 export interface Device {
@@ -281,6 +282,12 @@ export const signIn = {
   acceptInvitation: (form: { mailAuthToken: string, password: string, parentName: string, timeZone: string }) =>
     call<{ userId: string }>('/signin/accept-invitation', form),
   declineInvitation: (mailAuthToken: string) => call<{ ok: true }>('/signin/decline-invitation', { mailAuthToken })
+}
+
+// @tag:family-join-google
+export const join = {
+  preview: (idToken: string) => call<{ familyName: string, childName: string }>('/join/preview', { idToken }),
+  confirm: (idToken: string, registerToken: string) => call<{ ok: true }>('/join/confirm', { idToken, registerToken })
 }
 
 export const signOut = (): Promise<unknown> => call('/signout', {})

@@ -31,6 +31,13 @@ const ADULT_ROLE_HINTS: StatusHints = {
   409: 'a family always keeps one admin: make another adult an admin first, or delete the family'
 }
 
+// @tag:family-join-google
+const JOIN_HINTS: StatusHints = {
+  404: 'the Google account is not linked to any child on this server (or the server is older than tim-29)',
+  501: 'Google sign-in is switched off on the server: GOOGLE_CLIENT_ID is not set',
+  401: 'Google ID token was rejected — sign in with Google again'
+}
+
 const unauthorizedHint = 'the device token is unknown to the server: the parent device was removed or the token is wrong — run `login` again'
 
 /** One app's total on one day on one device — `POST /parent/get-app-usage`, docs/specification/protocol-new-ui.md §4. */
@@ -176,6 +183,27 @@ export class TimelimitApi {
   // @tag:adult-role
   async setAdultRole ({ deviceAuthToken, parentId, userId, role }: { deviceAuthToken: string, parentId: string, userId: string, role: AdultRole }): Promise<void> {
     await this.post('/parent/set-adult-role', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', userId, role }, ADULT_ROLE_HINTS)
+  }
+
+  // @tag:family-join-google
+  async setChildMail ({ deviceAuthToken, parentId, childUserId, mail }: { deviceAuthToken: string, parentId: string, childUserId: string, mail: string | null }): Promise<void> {
+    await this.post('/parent/set-child-mail', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', childUserId, mail }, {
+      ...ADULT_ROLE_HINTS,
+      404: 'this server cannot link a child\'s Google account (needs the server from tim-29)',
+      409: 'the address is linked to another child or belongs to an adult — one Google account joins one child on this server'
+    })
+  }
+
+  /** Who the child's verified Google account joins, asked before the child agrees. */
+  // @tag:family-join-google
+  async joinPreview ({ idToken }: { idToken: string }): Promise<{ familyName: string, childName: string }> {
+    return this.post('/auth/join-preview', { idToken }, JOIN_HINTS)
+  }
+
+  /** Lets the device that made up `registerToken` join as the child, through the usual `/child/add-device`. */
+  // @tag:family-join-google
+  async join ({ idToken, registerToken }: { idToken: string, registerToken: string }): Promise<void> {
+    await this.post('/auth/join', { idToken, registerToken }, { ...JOIN_HINTS, 409: 'this sign-in was already used — press «Sign in with Google» in TimeLimit again' })
   }
 
   // @tag:adult-role

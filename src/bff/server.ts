@@ -108,6 +108,7 @@ export class Bff {
     const path = url.pathname.slice(this.basePath.length + 1)
 
     if (path.startsWith('signin/')) return this.handleSignIn(path.slice('signin/'.length), request, response)
+    if (path.startsWith('join/')) return this.handleJoin(path.slice('join/'.length), request, response)
     if (path === 'signout') return this.handleSignOut(request, response)
     if (path === 'events') return this.handleEvents(request, response)
     if (path.startsWith('view/')) return this.handleView(path.slice('view/'.length), url, request, response)
@@ -115,7 +116,7 @@ export class Bff {
     if (path === 'device/add-token') return this.handleAddDeviceToken(request, response)
     if (path.startsWith('icon/')) return this.handleIcon(decodeURIComponent(path.slice('icon/'.length)), request, response)
 
-    this.fail(response, new ParentConsoleError(`no such endpoint: ${path}`, 'known: signin/*, signout, events, view/*, intent/*, device/add-token, icon/<package>'))
+    this.fail(response, new ParentConsoleError(`no such endpoint: ${path}`, 'known: signin/*, join/*, signout, events, view/*, intent/*, device/add-token, icon/<package>'))
   }
 
   // --- вход -------------------------------------------------------------------------------
@@ -183,6 +184,21 @@ export class Bff {
     this.fail(response, new BadRequestError(`no such sign-in step: ${step}`))
   }
 
+  /**
+   * The child's tablet opens this in a browser: no parent session here, the Google ID token of the
+   * child is the only credential, and the sync server checks it.
+   */
+  // @tag:family-join-google
+  private async handleJoin (step: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const body = await readJson(request)
+    if (step === 'preview') return send(response, 200, await this.api.joinPreview({ idToken: requireString(body, 'idToken') }))
+    if (step === 'confirm') {
+      await this.api.join({ idToken: requireString(body, 'idToken'), registerToken: requireString(body, 'registerToken') })
+      return send(response, 200, { ok: true })
+    }
+    this.fail(response, new BadRequestError(`no such join step: ${step}`))
+  }
+
   private async handleSignOut (request: IncomingMessage, response: ServerResponse): Promise<void> {
     const session = this.sessionOf(request)
     if (session) {
@@ -224,6 +240,7 @@ export class Bff {
       if (name === 'revoke-invitation') await client.revokeParentInvitation(requireString(body, 'mail'))
       if (name === 'adult-role') await client.setAdultRole(requireString(body, 'user'), optionalRole(body) ?? badRole())
       if (name === 'adult-remove') await client.removeAdult(requireString(body, 'user'))
+      if (name === 'child-mail') await client.setChildMail(requireString(body, 'child'), optionalMail(body)) // @tag:family-join-google
       if (name === 'family-leave') await client.leaveFamily()
       if (name === 'family-delete') {
         if (requireString(body, 'word').trim().toLowerCase() !== DELETE_FAMILY_WORD) throw new BadRequestError(`the confirmation word must be «${DELETE_FAMILY_WORD}»`, `type «${DELETE_FAMILY_WORD}» to delete the family`)
@@ -554,7 +571,7 @@ function cookie (name: string, value: string, maxAgeSeconds = 90 * 24 * 60 * 60)
 // @tag:adult-role
 const DELETE_FAMILY_WORD = 'удалить'
 const SIGNING_OUT_INTENTS = ['family-leave', 'family-delete']
-const FAMILY_INTENTS = ['invite-parent', 'revoke-invitation', 'adult-role', 'adult-remove']
+const FAMILY_INTENTS = ['invite-parent', 'revoke-invitation', 'adult-role', 'adult-remove', 'child-mail']
 const ADMIN_INTENTS = [...FAMILY_INTENTS, 'family-delete']
 
 /**
@@ -583,6 +600,13 @@ function optionalRole (body: Record<string, unknown>): AdultRole | undefined {
   if (body.role === undefined) return undefined
   if (!isAdultRole(body.role)) throw new BadRequestError('role must be admin, manager or member')
   return body.role
+}
+
+// @tag:family-join-google
+function optionalMail (body: Record<string, unknown>): string | null {
+  if (body.mail === null || body.mail === '') return null
+  if (typeof body.mail !== 'string') throw new BadRequestError('mail must be a string or null')
+  return body.mail.trim()
 }
 
 const badRole = (): never => { throw new BadRequestError('role must be admin, manager or member') }

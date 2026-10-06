@@ -11,6 +11,7 @@ import { Requests } from './requests.tsx'
 import { Home } from './home.tsx'
 import { CategoryDetails } from './category.tsx'
 import { AddChildForm, AddDevice } from './setup.tsx'
+import { JoinPage } from './join.tsx'
 import { SignIn } from './signin.tsx'
 import { Sites } from './sites.tsx'
 import { clearLocal, forgetLegacySecrets, readLocal, writeLocal } from './store.ts'
@@ -372,5 +373,8 @@ forgetLegacySecrets()
 void loadWebConfig().then((config) => {
   const container = document.getElementById('app')!
   container.textContent = ''
-  render(<Root config={config} />, container)
+  // @tag:family-join-google — the child's tablet opens this without any parent session
+  const joining = /^join\/(.*)$/.exec(currentRoute())
+  render(joining ? <JoinPage code={joining[1]} googleClientId={config.googleClientId} /> : <Root config={config} />, container)
+  addEventListener('hashchange', () => { if (/^join\//.test(currentRoute()) !== Boolean(joining)) location.reload() })
 })
