@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "preact": "^10.29.8"
+    "preact": "^10.29.8",
+    "uqr": "0.1.3"
   }
 }

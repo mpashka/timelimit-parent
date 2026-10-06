@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useMemo, useState } from 'preact/hooks'
+import { renderSVG } from 'uqr'
 import { type AddDeviceToken, createAddDeviceToken } from './api.ts'
 import { errorText, type ErrorText, formatCountdown } from './format.ts'
 import { SubmitButton, useApp, useBusy, type Work } from './ui.tsx'
@@ -58,6 +59,12 @@ export function AddChildForm ({ run }: { run: (work: Work) => Promise<boolean> }
   )
 }
 
+// @tag:family-join-qr
+function DeviceCodeQr ({ code }: { code: string }) {
+  const svg = useMemo(() => renderSVG(code, { border: 4 }), [code])
+  return <div class='device-qr' role='img' aria-label='QR с кодом для детского устройства' dangerouslySetInnerHTML={{ __html: svg }} />
+}
+
 type TokenState = { name: 'loading' } | { name: 'failed', error: ErrorText } | { name: 'shown', token: AddDeviceToken, expiresAt: number }
 
 export function AddDevice () {
@@ -113,12 +120,13 @@ export function AddDevice () {
       {token.name === 'shown' && !joined && !expired
         ? (
           <>
+            <DeviceCodeQr code={token.token.token} />
             <p class='device-code' aria-label='Код для детского устройства'>{token.token.token}</p>
             <p class='muted small'>Код действует ещё {formatCountdown(token.expiresAt - now)} и только один раз. Новый код отменяет этот.</p>
             <ol class='steps'>
               <li>Установите TimeLimit на детское устройство и откройте.</li>
               <li>«connected mode» → «Code from another TimeLimit installation».</li>
-              <li>Введите слова кода — регистр не важен.</li>
+              <li>«Scan code» и наведите камеру на QR — или введите слова кода, регистр не важен.</li>
             </ol>
             <p class='muted small'>Эта страница сама покажет, когда устройство подключится.</p>
           </>
