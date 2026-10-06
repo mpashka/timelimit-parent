@@ -1,20 +1,20 @@
 import { useState } from 'preact/hooks'
 import { ADULT_ROLES, type AdultRole, ROLE_DESCRIPTIONS, ROLE_TITLES } from '../shared/adult-role.ts'
 import { LABEL_MAX, labelProblem } from '../shared/label.ts'
-import { googleClientIdOf, type ParentsView, signIn } from './api.ts'
+import { googleClientIdOf, mailLoginOf, type ParentsView, signIn } from './api.ts'
 import { errorText, type ErrorText } from './format.ts'
 import { ErrorBox } from './setup.tsx'
 import { GoogleButton } from './signin.tsx'
-import { ActionButton, RowMenu, SubmitButton, useBusy, useFamily, useScreen, type Work } from './ui.tsx'
+import { ActionButton, ConfirmByCodeOption, ConfirmCodeForm, RowMenu, SubmitButton, useBusy, useFamily, useScreen, type Work } from './ui.tsx'
 
 // @tag:parent-invitation @tag:adult-role
 
 type Adult = ParentsView['parents'][number]
 
-const invite = (mail: string, role: AdultRole): Work => ({
+const invite = (mail: string, role: AdultRole, confirmByCode: boolean): Work => ({
   key: 'invite',
   intent: 'invite-parent',
-  body: { mail, role },
+  body: { mail, role, confirmByCode },
   done: `${mail} приглашён — войдёт в семью, когда сам согласится при входе`,
   undo: () => ({ intent: 'revoke-invitation', body: { mail } })
 })
@@ -25,6 +25,17 @@ const revoke = (mail: string, role: AdultRole) => (): Work => ({
   body: { mail },
   done: `Приглашение ${mail} отозвано`,
   undo: () => ({ intent: 'invite-parent', body: { mail, role } })
+})
+
+// @tag:family-join-link
+const invitationLink = (mail: string): string => `${location.origin}${location.pathname}#/invite/${encodeURIComponent(mail)}`
+
+// @tag:family-join-link
+const sendLetter = (mail: string) => (): Work => ({ key: `letter-${mail}`, intent: 'invitation-mail', body: { mail }, done: `Письмо со ссылкой ушло на ${mail}` })
+
+// @tag:family-join-link
+const confirmInvitation = (mail: string) => (code: string): Work => ({
+  key: `confirm-${mail}`, intent: 'invitation-confirm', body: { mail, code }, done: `Код верный — ${mail} входит в семью`
 })
 
 const changeRole = (adult: Adult, role: AdultRole) => (): Work => ({
@@ -40,6 +51,8 @@ export function Parents () {
   const view = useScreen<ParentsView>()
   const [mail, setMail] = useState('')
   const [inviteRole, setInviteRole] = useState<AdultRole>('manager')
+  const [confirmByCode, setConfirmByCode] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
   const [renaming, setRenaming] = useState<{ adult: Adult, draft: string } | null>(null)
   const [confirming, setConfirming] = useState<{ adult: Adult, leaving: boolean } | null>(null)
   const { run, pending } = useFamily()
@@ -74,9 +87,26 @@ export function Parents () {
             </li>
           ))}
           {view.invitations.map((invitation) => (
-            <li key={invitation.mail} class='row'>
-              <div class='grow'>{invitation.mail}<div class='muted small'>приглашён{invitation.role ? ` — ${ROLE_TITLES[invitation.role].toLowerCase()}` : ''}, ещё не входил</div></div>
-              {admin ? <ActionButton class='link' work={revoke(invitation.mail, invitation.role ?? 'manager')}>Отозвать</ActionButton> : null}
+            <li key={invitation.mail}>
+              <div class='row'>
+                <div class='grow'>{invitation.mail}<div class='muted small'>
+                  приглашён{invitation.role ? ` — ${ROLE_TITLES[invitation.role].toLowerCase()}` : ''}
+                  {invitation.awaitingCode ? ', согласился и ждёт, когда вы введёте его код' : ', ещё не входил'}
+                  {invitation.confirmByCode && !invitation.awaitingCode ? ' · вход по коду' : ''}
+                </div></div>
+                {admin ? <ActionButton class='link' work={revoke(invitation.mail, invitation.role ?? 'manager')}>Отозвать</ActionButton> : null}
+              </div>
+              {admin
+                ? (
+                  <div class='chips'>
+                    <button type='button' class='own' onClick={() => {
+                      void navigator.clipboard.writeText(invitationLink(invitation.mail)).then(() => setCopied(invitation.mail), () => setCopied(null))
+                    }}>{copied === invitation.mail ? 'Ссылка скопирована' : 'Скопировать ссылку'}</button>
+                    {mailLoginOf() ? <ActionButton work={sendLetter(invitation.mail)}>Отправить письмом</ActionButton> : null}
+                  </div>
+                  )
+                : null}
+              {admin && invitation.awaitingCode ? <ConfirmCodeForm label='Код с экрана приглашённого' work={confirmInvitation(invitation.mail)} /> : null}
             </li>
           ))}
         </ul>
@@ -103,7 +133,7 @@ export function Parents () {
         : null}
       {admin
         ? (
-          <form class='card' onSubmit={(event) => { event.preventDefault(); void run(invite(mail.trim(), inviteRole)).then((ok) => { if (ok) setMail('') }) }}>
+          <form class='card' onSubmit={(event) => { event.preventDefault(); void run(invite(mail.trim(), inviteRole, confirmByCode)).then((ok) => { if (ok) { setMail(''); setConfirmByCode(false) } }) }}>
             <label>Пригласить взрослого — почта его аккаунта Google
               <input type='email' autocomplete='off' required value={mail} onInput={(event) => setMail(event.currentTarget.value)} />
             </label>
@@ -115,8 +145,9 @@ export function Parents () {
                 </label>
               ))}
             </fieldset>
+            <ConfirmByCodeOption checked={confirmByCode} onChange={setConfirmByCode} />
             <button type='submit' class='primary' disabled={mail.trim() === ''}>Пригласить</button>
-            <p class='muted small'>Он войдёт в веб-админку этим адресом и согласится — до этого в семье его нет.</p>
+            <p class='muted small'>Потом пошлите ему ссылку из строки приглашения: он войдёт в веб-админку этим адресом и согласится — до этого в семье его нет.</p>
           </form>
           )
         : null}

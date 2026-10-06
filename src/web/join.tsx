@@ -13,7 +13,7 @@ const REGISTER_TOKEN = /^[a-z0-9]{20,64}$/
 type Step =
   | { name: 'signin' }
   | { name: 'ask', idToken: string, familyName: string, childName: string }
-  | { name: 'done', familyName: string, childName: string }
+  | { name: 'done', familyName: string, childName: string, confirmCode?: string }
 
 /** The failures a child meets here, in words of what to do — the console's wording speaks to a parent. */
 function joinErrorText (ex: unknown): ErrorText {
@@ -74,15 +74,23 @@ export function JoinPage ({ code, googleClientId }: { code: string, googleClient
             <p>Присоединить это устройство к семье <b>{step.familyName || 'без названия'}</b> как <b>{step.childName}</b>?</p>
             <p class='muted small'>Родители этой семьи будут видеть, чем занято устройство, и ограничивать время.</p>
             <SubmitButton phase={phase} onClick={() => attempt(async () => {
-              await join.confirm(step.idToken, code)
-              setStep({ name: 'done', familyName: step.familyName, childName: step.childName })
+              const { confirmCode } = await join.confirm(step.idToken, code)
+              setStep({ name: 'done', familyName: step.familyName, childName: step.childName, confirmCode })
             })}>Согласен</SubmitButton>
             <button type='button' class='link' onClick={() => setStep({ name: 'signin' })}>Не согласен</button>
           </>
           )
         : null}
       {step.name === 'done'
-        ? <p><b>Готово.</b> Вернитесь в TimeLimit — он сам продолжит подключение и будет считать время {step.childName}.</p>
+        ? step.confirmCode // @tag:family-join-link
+          ? (
+            <>
+              <p>Назовите код администратору семьи:</p>
+              <p class='big-code'>{step.confirmCode}</p>
+              <p>Когда он введёт его в веб-админке, вернитесь в TimeLimit — он сам закончит подключение.</p>
+            </>
+            )
+          : <p><b>Готово.</b> Вернитесь в TimeLimit — он сам продолжит подключение и будет считать время {step.childName}.</p>
         : null}
       <ErrorBox error={error} />
     </main>

@@ -758,6 +758,7 @@ export interface ServerUserEntry {
   urlFilter?: UrlFilter
   adultRole?: 'admin' | 'manager' | 'member'
   childMail?: string
+  childMailConfirmByCode?: boolean
   requests?: Array<ServerChildRequest>
   appAllowances?: Array<ServerAppAllowance>
   appRules?: Array<ServerAppRule>

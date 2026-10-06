@@ -17,7 +17,17 @@ export const DEFAULT_SERVER_URL = 'https://child-time.pasha-home.ru'
 export type { AddDeviceToken, MailStatus, OwnFamily, ReceivedInvitation, SessionSignInResult, SignInResult } from './protocol.ts'
 
 // @tag:parent-invitation
-export interface ParentInvitation { mail: string, createdAt: number, role?: AdultRole }
+export interface ParentInvitation {
+  mail: string, createdAt: number, role?: AdultRole
+  confirmByCode?: boolean // @tag:family-join-link
+  awaitingCode?: boolean // @tag:family-join-link
+}
+
+// @tag:family-join-link
+export interface ServerCapabilities { mailLogin: boolean, googleSignIn: boolean }
+
+// @tag:family-join-link
+export type AcceptInvitationResult = SessionSignInResult | { awaitingConfirmation: { code: string } }
 
 /** Server worker `delete-old-tokens` removes add-device tokens and mail auth tokens older than this. */
 export const TOKEN_LIFETIME_MS = 3 * 60 * 60 * 1000
@@ -36,6 +46,13 @@ const JOIN_HINTS: StatusHints = {
   404: 'the Google account is not linked to any child on this server (or the server is older than tim-29)',
   501: 'Google sign-in is switched off on the server: GOOGLE_CLIENT_ID is not set',
   401: 'Google ID token was rejected — sign in with Google again'
+}
+
+// @tag:family-join-link
+const CONFIRM_HINTS: StatusHints = {
+  ...ADULT_ROLE_HINTS,
+  404: 'this server cannot confirm by code (needs the server from tim-29)',
+  409: 'the code does not match — ask for the four digits on the invited screen again'
 }
 
 const unauthorizedHint = 'the device token is unknown to the server: the parent device was removed or the token is wrong — run `login` again'
@@ -152,8 +169,8 @@ export class TimelimitApi {
   /** Joins the family that invited this mail; without a password the parent mode on the tablets stays closed to this parent. */
   async acceptInvitation ({ mailAuthToken, parentName, timeZone, password }: {
     mailAuthToken: string, parentName: string, timeZone: string, password: ParentPassword | null
-  }): Promise<SessionSignInResult> {
-    return this.post<SessionSignInResult>(
+  }): Promise<AcceptInvitationResult> {
+    return this.post<AcceptInvitationResult>(
       '/session/accept-invitation',
       { mailAuthToken, parentName, timeZone, ...(password ? { parentPassword: password } : {}) },
       {
@@ -170,9 +187,11 @@ export class TimelimitApi {
   }
 
   // @tag:parent-invitation
-  async inviteParent ({ deviceAuthToken, parentId, mail, role }: { deviceAuthToken: string, parentId: string, mail: string, role: AdultRole }): Promise<ParentInvitation> {
+  async inviteParent ({ deviceAuthToken, parentId, mail, role, confirmByCode }: {
+    deviceAuthToken: string, parentId: string, mail: string, role: AdultRole, confirmByCode: boolean
+  }): Promise<ParentInvitation> {
     return this.post<ParentInvitation>(
-      '/parent/invite-parent', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', mail, role },
+      '/parent/invite-parent', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', mail, role, ...(confirmByCode ? { confirmByCode } : {}) },
       {
         404: 'this server has no parent invitations (needs the new-ui server branch from tim-136)',
         409: 'this address is already an adult of this family or is invited into another one'
@@ -186,8 +205,10 @@ export class TimelimitApi {
   }
 
   // @tag:family-join-google
-  async setChildMail ({ deviceAuthToken, parentId, childUserId, mail }: { deviceAuthToken: string, parentId: string, childUserId: string, mail: string | null }): Promise<void> {
-    await this.post('/parent/set-child-mail', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', childUserId, mail }, {
+  async setChildMail ({ deviceAuthToken, parentId, childUserId, mail, confirmByCode }: {
+    deviceAuthToken: string, parentId: string, childUserId: string, mail: string | null, confirmByCode: boolean
+  }): Promise<void> {
+    await this.post('/parent/set-child-mail', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', childUserId, mail, ...(confirmByCode ? { confirmByCode } : {}) }, {
       ...ADULT_ROLE_HINTS,
       404: 'this server cannot link a child\'s Google account (needs the server from tim-29)',
       409: 'the address is linked to another child or belongs to an adult — one Google account joins one child on this server'
@@ -202,8 +223,36 @@ export class TimelimitApi {
 
   /** Lets the device that made up `registerToken` join as the child, through the usual `/child/add-device`. */
   // @tag:family-join-google
-  async join ({ idToken, registerToken }: { idToken: string, registerToken: string }): Promise<void> {
-    await this.post('/auth/join', { idToken, registerToken }, { ...JOIN_HINTS, 409: 'this sign-in was already used — press «Sign in with Google» in TimeLimit again' })
+  async join ({ idToken, registerToken }: { idToken: string, registerToken: string }): Promise<{ confirmCode?: string }> {
+    const { confirmCode } = await this.post<{ confirmCode?: string }>('/auth/join', { idToken, registerToken }, { ...JOIN_HINTS, 409: 'this sign-in was already used — press «Sign in with Google» in TimeLimit again' })
+    return confirmCode === undefined ? {} : { confirmCode }
+  }
+
+  /** A server older than tim-29 has no such endpoint and always could send mail. */
+  // @tag:family-join-link
+  async capabilities ({ googleSignIn }: { googleSignIn: boolean }): Promise<ServerCapabilities> {
+    const response = await this.fetchImpl(this.serverUrl + '/auth/capabilities').catch(() => null)
+    if (!response?.ok) return { mailLogin: true, googleSignIn }
+    return await response.json() as ServerCapabilities
+  }
+
+  // @tag:family-join-link
+  async confirmParentInvitation ({ deviceAuthToken, parentId, mail, code }: { deviceAuthToken: string, parentId: string, mail: string, code: string }): Promise<void> {
+    await this.post('/parent/confirm-parent-invitation', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', mail, code }, CONFIRM_HINTS)
+  }
+
+  // @tag:family-join-link
+  async confirmDeviceJoin ({ deviceAuthToken, parentId, code }: { deviceAuthToken: string, parentId: string, code: string }): Promise<void> {
+    await this.post('/parent/confirm-device-join', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', code }, CONFIRM_HINTS)
+  }
+
+  // @tag:family-join-link
+  async sendInvitationMail ({ deviceAuthToken, parentId, mail, link }: { deviceAuthToken: string, parentId: string, mail: string, link: string }): Promise<void> {
+    await this.post('/parent/send-invitation-mail', { deviceAuthToken, parentUserId: parentId, parentPasswordSecondHash: 'device', mail, link }, {
+      ...CONFIRM_HINTS,
+      501: 'this server sends no mail (MAIL_TRANSPORT is not set) — copy the link and send it yourself',
+      409: 'there is no such invitation: invite first, then send the letter'
+    })
   }
 
   // @tag:adult-role

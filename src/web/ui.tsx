@@ -241,3 +241,49 @@ export function RowMenu ({ title, subtitle, children, class: className = '' }: {
     </span>
   )
 }
+
+/** Explains itself in one line; the «?» unfolds why it exists and when it is worth the extra step. */
+// @tag:family-join-link
+export function ConfirmByCodeOption ({ checked, onChange }: { checked: boolean, onChange: (checked: boolean) => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div class='confirm-by-code'>
+      <label class='check'>
+        <input type='checkbox' checked={checked} onChange={(event) => onChange(event.currentTarget.checked)} />
+        <span>Дополнительно подтвердить вход кодом <span class='muted small'>— войдёт тот, кто назовёт вам четыре цифры</span></span>
+        <button type='button' class='help' aria-expanded={open} aria-label='Подробнее' onClick={() => setOpen(!open)}>?</button>
+      </label>
+      {open
+        ? (
+          <p class='muted small'>
+            Ссылку или адрес можно переслать, а аккаунтом Google может войти не тот, кого вы ждёте. С галочкой
+            согласие не открывает вход сразу: на экране приглашённого — или на планшете ребёнка — появятся четыре
+            цифры, и вход случится, только когда вы введёте их здесь. Нужна, когда приглашаете на расстоянии;
+            если устройство у вас в руках и вы сканируете QR, она лишняя.
+          </p>
+          )
+        : null}
+    </div>
+  )
+}
+
+/** Four digits the invited screen shows; entering them here lets that person or tablet in. */
+// @tag:family-join-link
+export function ConfirmCodeForm ({ label, work }: { label: string, work: (code: string) => Work }) {
+  const { run } = useFamily()
+  const [code, setCode] = useState('')
+  const [phase, wrap] = useBusy()
+  const ready = /^[0-9]{4}$/.test(code.trim())
+  return (
+    <form class='row confirm-code' onSubmit={(event) => {
+      event.preventDefault()
+      if (!ready) return
+      void wrap(async () => { if (await run(work(code.trim()))) setCode('') })
+    }}>
+      <label class='grow'>{label}
+        <input inputMode='numeric' autocomplete='one-time-code' maxLength={4} pattern='[0-9]{4}' value={code} onInput={(event) => setCode(event.currentTarget.value)} />
+      </label>
+      <SubmitButton phase={phase} disabled={!ready}>Подтвердить</SubmitButton>
+    </form>
+  )
+}

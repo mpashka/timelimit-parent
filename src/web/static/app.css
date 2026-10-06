@@ -320,3 +320,11 @@ body.read-only .switch, body.read-only .check { pointer-events: none; }
 body.read-only .switch input, body.read-only .check input { opacity: .6; }
 fieldset.roles { border: none; padding: 0; margin: 8px 0; display: grid; gap: 2px; }
 button.danger { background: var(--danger, #c62828); border-color: var(--danger, #c62828); color: #fff; }
+
+/* @tag:family-join-link */
+.confirm-by-code { margin: 8px 0; }
+.confirm-by-code .help { width: 22px; height: 22px; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: none; color: var(--text); font-size: 13px; line-height: 1; cursor: pointer; }
+.confirm-by-code p { margin: 4px 0 0 26px; }
+.confirm-code { margin-top: 6px; align-items: flex-end; }
+.confirm-code input { width: 6em; letter-spacing: 0.2em; }
+.big-code { font-size: 40px; font-weight: 700; letter-spacing: 0.3em; margin: 8px 0; }

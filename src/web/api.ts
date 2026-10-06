@@ -19,6 +19,7 @@ export interface Person {
   disableLimitsUntil: number
   adultRole?: AdultRole // @tag:adult-role
   childMail?: string // @tag:family-join-google
+  childMailConfirmByCode?: boolean // @tag:family-join-link
 }
 
 export interface Device {
@@ -207,7 +208,7 @@ export interface MailStatus {
 export interface ParentsView {
   parents: Array<{ id: string, name: string, mail: string, role: AdultRole }>
   signedInUserId: string
-  invitations: Array<{ mail: string, createdAt: number, role?: AdultRole }>
+  invitations: Array<{ mail: string, createdAt: number, role?: AdultRole, confirmByCode?: boolean, awaitingCode?: boolean }>
   invitationsProblem: string | null
 }
 
@@ -215,6 +216,11 @@ export interface WebConfig { googleClientId?: string, apiUrl?: string }
 
 let apiUrl = ''
 let googleClientId: string | undefined
+let mailLogin = true
+
+/** False when the sync server sends no mail: the code-by-mail sign-in and the invitation letter are hidden. */
+// @tag:family-join-link
+export const mailLoginOf = (): boolean => mailLogin
 
 export const apiBase = (): string => apiUrl
 export const googleClientIdOf = (): string | undefined => googleClientId
@@ -229,6 +235,13 @@ export async function loadWebConfig (): Promise<WebConfig> {
   }
   apiUrl = (config.apiUrl ?? location.origin + '/api').replace(/\/+$/, '')
   googleClientId = config.googleClientId
+  // @tag:family-join-link
+  try {
+    const response = await fetch(apiUrl + '/capabilities', { cache: 'no-cache' })
+    if (response.ok) mailLogin = (await response.json() as { mailLogin: boolean }).mailLogin
+  } catch {
+    mailLogin = true
+  }
   return config
 }
 
@@ -280,14 +293,14 @@ export const signIn = {
   createFamily: (form: { mailAuthToken: string, password: string, parentName: string, timeZone: string }) =>
     call<{ userId: string }>('/signin/create-family', form),
   acceptInvitation: (form: { mailAuthToken: string, password: string, parentName: string, timeZone: string }) =>
-    call<{ userId: string }>('/signin/accept-invitation', form),
+    call<{ userId: string } | { awaitingConfirmation: { code: string } }>('/signin/accept-invitation', form),
   declineInvitation: (mailAuthToken: string) => call<{ ok: true }>('/signin/decline-invitation', { mailAuthToken })
 }
 
 // @tag:family-join-google
 export const join = {
   preview: (idToken: string) => call<{ familyName: string, childName: string }>('/join/preview', { idToken }),
-  confirm: (idToken: string, registerToken: string) => call<{ ok: true }>('/join/confirm', { idToken, registerToken })
+  confirm: (idToken: string, registerToken: string) => call<{ ok: true, confirmCode?: string }>('/join/confirm', { idToken, registerToken })
 }
 
 export const signOut = (): Promise<unknown> => call('/signout', {})

@@ -141,6 +141,21 @@ test('only an admin links a child\'s Google account, and the child\'s tablet joi
   assert.equal(server.calls.some((c) => c.path === '/parent/set-child-mail'), false)
 })
 
+// @tag:family-join-link
+test('only an admin confirms a code or sends an invitation letter, and an old server keeps the mail sign-in', async () => {
+  const server = fakeServer({ role: 'manager' })
+  const { bff, call } = await startBff(server)
+  after(() => bff.close())
+
+  assert.deepEqual((await call('/capabilities')).body, { mailLogin: true, googleSignIn: false })
+
+  await call('/signin/session', { mailAuthToken: 'mail-token' })
+  for (const [intent, body] of [['invitation-confirm', { mail: 'mama@example.com', code: '1234' }], ['device-join-confirm', { code: '1234' }], ['invitation-mail', { mail: 'mama@example.com' }]] as const) {
+    assert.equal((await call(`/intent/${intent}`, body)).status, 409, intent)
+  }
+  assert.equal(server.calls.some((c) => /confirm|send-invitation-mail/.test(c.path)), false)
+})
+
 // @tag:adult-role
 test('a member is refused in words before the sync server, and may still rename himself', async () => {
   const server = fakeServer({ role: 'member' })

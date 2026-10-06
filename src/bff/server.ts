@@ -109,6 +109,7 @@ export class Bff {
 
     if (path.startsWith('signin/')) return this.handleSignIn(path.slice('signin/'.length), request, response)
     if (path.startsWith('join/')) return this.handleJoin(path.slice('join/'.length), request, response)
+    if (path === 'capabilities') return send(response, 200, await this.api.capabilities({ googleSignIn: false })) // @tag:family-join-link
     if (path === 'signout') return this.handleSignOut(request, response)
     if (path === 'events') return this.handleEvents(request, response)
     if (path.startsWith('view/')) return this.handleView(path.slice('view/'.length), url, request, response)
@@ -116,7 +117,7 @@ export class Bff {
     if (path === 'device/add-token') return this.handleAddDeviceToken(request, response)
     if (path.startsWith('icon/')) return this.handleIcon(decodeURIComponent(path.slice('icon/'.length)), request, response)
 
-    this.fail(response, new ParentConsoleError(`no such endpoint: ${path}`, 'known: signin/*, join/*, signout, events, view/*, intent/*, device/add-token, icon/<package>'))
+    this.fail(response, new ParentConsoleError(`no such endpoint: ${path}`, 'known: signin/*, join/*, capabilities, signout, events, view/*, intent/*, device/add-token, icon/<package>'))
   }
 
   // --- вход -------------------------------------------------------------------------------
@@ -162,12 +163,15 @@ export class Bff {
       if (password !== null && password.length < PARENT_PASSWORD_MIN_LENGTH) {
         throw new BadRequestError(`the parent password must have at least ${PARENT_PASSWORD_MIN_LENGTH} characters, or none at all`)
       }
-      const stored = this.store.createSession(await this.api.acceptInvitation({
+      const accepted = await this.api.acceptInvitation({
         mailAuthToken: requireString(body, 'mailAuthToken'),
         parentName: requireString(body, 'parentName'),
         timeZone: requireString(body, 'timeZone'),
         password: password === null ? null : await hashParentPassword(password)
-      }))
+      })
+      // @tag:family-join-link
+      if ('awaitingConfirmation' in accepted) return send(response, 200, accepted)
+      const stored = this.store.createSession(accepted)
       response.setHeader('Set-Cookie', cookie(COOKIE_NAME, stored.cookieId))
       return send(response, 200, { userId: stored.userId, familyId: stored.familyId })
     }
@@ -193,8 +197,8 @@ export class Bff {
     const body = await readJson(request)
     if (step === 'preview') return send(response, 200, await this.api.joinPreview({ idToken: requireString(body, 'idToken') }))
     if (step === 'confirm') {
-      await this.api.join({ idToken: requireString(body, 'idToken'), registerToken: requireString(body, 'registerToken') })
-      return send(response, 200, { ok: true })
+      const { confirmCode } = await this.api.join({ idToken: requireString(body, 'idToken'), registerToken: requireString(body, 'registerToken') })
+      return send(response, 200, confirmCode === undefined ? { ok: true } : { ok: true, confirmCode }) // @tag:family-join-link
     }
     this.fail(response, new BadRequestError(`no such join step: ${step}`))
   }
@@ -236,11 +240,15 @@ export class Bff {
       assertRoleAllows(state, session.userId, name, body)
       // @tag:parent-invitation @tag:adult-role
       // состав семьи — не действия синхронизации, а отдельные ручки сервера
-      if (name === 'invite-parent') await client.inviteParent(requireString(body, 'mail'), optionalRole(body) ?? 'manager')
+      if (name === 'invite-parent') await client.inviteParent(requireString(body, 'mail'), optionalRole(body) ?? 'manager', body.confirmByCode === true)
       if (name === 'revoke-invitation') await client.revokeParentInvitation(requireString(body, 'mail'))
       if (name === 'adult-role') await client.setAdultRole(requireString(body, 'user'), optionalRole(body) ?? badRole())
       if (name === 'adult-remove') await client.removeAdult(requireString(body, 'user'))
-      if (name === 'child-mail') await client.setChildMail(requireString(body, 'child'), optionalMail(body)) // @tag:family-join-google
+      if (name === 'child-mail') await client.setChildMail(requireString(body, 'child'), optionalMail(body), body.confirmByCode === true) // @tag:family-join-google
+      // @tag:family-join-link
+      if (name === 'invitation-confirm') await client.confirmParentInvitation(requireString(body, 'mail'), requireString(body, 'code'))
+      if (name === 'device-join-confirm') await client.confirmDeviceJoin(requireString(body, 'code'))
+      if (name === 'invitation-mail') await client.sendInvitationMail(requireString(body, 'mail'), invitationLink(request, requireString(body, 'mail')))
       if (name === 'family-leave') await client.leaveFamily()
       if (name === 'family-delete') {
         if (requireString(body, 'word').trim().toLowerCase() !== DELETE_FAMILY_WORD) throw new BadRequestError(`the confirmation word must be «${DELETE_FAMILY_WORD}»`, `type «${DELETE_FAMILY_WORD}» to delete the family`)
@@ -571,7 +579,7 @@ function cookie (name: string, value: string, maxAgeSeconds = 90 * 24 * 60 * 60)
 // @tag:adult-role
 const DELETE_FAMILY_WORD = 'удалить'
 const SIGNING_OUT_INTENTS = ['family-leave', 'family-delete']
-const FAMILY_INTENTS = ['invite-parent', 'revoke-invitation', 'adult-role', 'adult-remove', 'child-mail']
+const FAMILY_INTENTS = ['invite-parent', 'revoke-invitation', 'adult-role', 'adult-remove', 'child-mail', 'invitation-confirm', 'device-join-confirm', 'invitation-mail']
 const ADMIN_INTENTS = [...FAMILY_INTENTS, 'family-delete']
 
 /**
@@ -600,6 +608,14 @@ function optionalRole (body: Record<string, unknown>): AdultRole | undefined {
   if (body.role === undefined) return undefined
   if (!isAdultRole(body.role)) throw new BadRequestError('role must be admin, manager or member')
   return body.role
+}
+
+// @tag:family-join-link
+// Консоль и BFF живут на одном адресе: /console/ и /api/; браузер называет его в Origin.
+function invitationLink (request: IncomingMessage, mail: string): string {
+  const origin = request.headers.origin ?? (request.headers.referer ? new URL(request.headers.referer).origin : undefined)
+  if (!origin) throw new BadRequestError('the request names no Origin, so the invitation link has no address', 'send the letter from the web console in a browser')
+  return `${origin}/console/#/invite/${encodeURIComponent(mail.trim().toLowerCase())}`
 }
 
 // @tag:family-join-google

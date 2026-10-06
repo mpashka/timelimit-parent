@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'preact/hooks'
 import { ROLE_DESCRIPTIONS, ROLE_TITLES } from '../shared/adult-role.ts'
-import { apiBase, type MailStatus, signIn } from './api.ts'
+import { apiBase, mailLoginOf, type MailStatus, signIn } from './api.ts'
 import { errorText, type ErrorText } from './format.ts'
 import { browserTimeZone, ErrorBox, PasswordField } from './setup.tsx'
 import { serverLabel, SubmitButton, useBusy } from './ui.tsx'
@@ -26,12 +26,25 @@ type Step =
   | { name: 'create', mailAuthToken: string, mail: string }
   | { name: 'invited', mailAuthToken: string, mail: string, invitation: NonNullable<MailStatus['invitation']>, ownFamily: MailStatus['ownFamily'], canCreateFamily: boolean }
   | { name: 'closed', mail: string }
+  | { name: 'awaiting', code: string, form: AcceptForm } // @tag:family-join-link
+
+type AcceptForm = Parameters<typeof signIn.acceptInvitation>[0]
+
+/** The address an invitation link names: `#/invite/<address>`. */
+// @tag:family-join-link
+const invitedMailOf = (): string => {
+  const found = /^#\/?invite\/(.+)$/.exec(location.hash)
+  return found ? decodeURIComponent(found[1]) : ''
+}
+
+const POLL_CONFIRMATION_MS = 3000
 
 export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: string, onSignedIn: () => void }) {
   const [step, setStep] = useState<Step>({ name: 'mail' })
   const [error, setError] = useState<ErrorText | null>(null)
   const [phase, wrap] = useBusy()
-  const [mail, setMail] = useState('')
+  const invitedMail = invitedMailOf()
+  const [mail, setMail] = useState(invitedMail)
   const [code, setCode] = useState('')
   const [parentName, setParentName] = useState('')
   const [password, setPassword] = useState('')
@@ -97,15 +110,20 @@ export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: strin
       {step.name === 'mail'
         ? (
           <>
-            <form onSubmit={attempt(async () => {
-              const { mailLoginToken } = await signIn.mailCode(mail.trim())
-              setStep({ name: 'code', mail: mail.trim(), mailLoginToken })
-            })}>
-              <label>Почта родителя
-                <input type='email' autocomplete='email' required value={mail} onInput={(e) => setMail(e.currentTarget.value)} />
-              </label>
-              <SubmitButton phase={phase}>Прислать код</SubmitButton>
-            </form>
+            {invitedMail ? <p>Вас пригласили в семью. Войдите адресом <b>{invitedMail}</b> — на него пришло приглашение.</p> : null}
+            {mailLoginOf()
+              ? (
+                <form onSubmit={attempt(async () => {
+                  const { mailLoginToken } = await signIn.mailCode(mail.trim())
+                  setStep({ name: 'code', mail: mail.trim(), mailLoginToken })
+                })}>
+                  <label>Почта родителя
+                    <input type='email' autocomplete='email' required value={mail} onInput={(e) => setMail(e.currentTarget.value)} />
+                  </label>
+                  <SubmitButton phase={phase}>Прислать код</SubmitButton>
+                </form>
+                )
+              : null}
             {googleClientId ? <GoogleButton clientId={googleClientId} onCredential={onGoogle} /> : null}
           </>
           )
@@ -146,6 +164,7 @@ export function SignIn ({ googleClientId, onSignedIn }: { googleClientId?: strin
           )
         : null}
       {step.name === 'invited' ? <Invited step={step} parentName={parentName} setParentName={setParentName} password={password} setPassword={setPassword} phase={phase} attempt={attempt} onSignedIn={onSignedIn} setStep={setStep} /> : null}
+      {step.name === 'awaiting' ? <AwaitingConfirmation code={step.code} form={step.form} onSignedIn={onSignedIn} onFailed={failed} /> : null}
       {step.name === 'closed'
         ? (
           <>
@@ -205,8 +224,10 @@ function Invited ({ step, parentName, setParentName, password, setPassword, phas
   }
   return (
     <form onSubmit={attempt(async () => {
-      await signIn.acceptInvitation({ mailAuthToken: step.mailAuthToken, password, parentName: parentName.trim(), timeZone: browserTimeZone() })
-      onSignedIn()
+      const form: AcceptForm = { mailAuthToken: step.mailAuthToken, password, parentName: parentName.trim(), timeZone: browserTimeZone() }
+      const accepted = await signIn.acceptInvitation(form)
+      if ('awaitingConfirmation' in accepted) setStep({ name: 'awaiting', code: accepted.awaitingConfirmation.code, form }) // @tag:family-join-link
+      else onSignedIn()
     })}>
       <p>{inviter} приглашает вас в свою семью — {ROLE_TITLES[role].toLowerCase()}: {ROLE_DESCRIPTIONS[role]}.</p>
       {ownFamily ? <p class='muted small'>Ваша прежняя семья пуста — ни детей, ни планшетов, — она удалится при входе в эту.</p> : null}
@@ -218,6 +239,29 @@ function Invited ({ step, parentName, setParentName, password, setPassword, phas
       <button type='button' class='link' onClick={decline}>Отказаться</button>
       {ownFamily ? <button type='button' class='link' onClick={intoOwn}>Войти в свою семью</button> : null}
     </form>
+  )
+}
+
+/** Repeats the same acceptance while the page is open: the server lets the person in once the admin entered the code. */
+// @tag:family-join-link
+function AwaitingConfirmation ({ code, form, onSignedIn, onFailed }: { code: string, form: AcceptForm, onSignedIn: () => void, onFailed: (ex: unknown) => void }) {
+  useEffect(() => {
+    let stopped = false
+    const timer = setInterval(() => {
+      signIn.acceptInvitation(form).then((accepted) => {
+        if (stopped || 'awaitingConfirmation' in accepted) return
+        stopped = true
+        onSignedIn()
+      }, (ex) => { if (!stopped) { stopped = true; onFailed(ex) } })
+    }, POLL_CONFIRMATION_MS)
+    return () => { stopped = true; clearInterval(timer) }
+  }, [form])
+  return (
+    <div>
+      <p>Назовите этот код тому, кто вас пригласил:</p>
+      <p class='big-code'>{code}</p>
+      <p class='muted small'>Когда он введёт код в своей веб-админке, эта страница сама войдёт в семью. Не закрывайте её.</p>
+    </div>
   )
 }
 

@@ -122,9 +122,27 @@ export class SyncClient {
   }
 
   // @tag:parent-invitation
-  async inviteParent (mail: string, role: AdultRole): Promise<ParentInvitation> {
+  async inviteParent (mail: string, role: AdultRole, confirmByCode = false): Promise<ParentInvitation> {
     const parentId = this.parentUserId(await this.sync())
-    return this.api.inviteParent({ deviceAuthToken: this.subject.authToken, parentId, mail, role })
+    return this.api.inviteParent({ deviceAuthToken: this.subject.authToken, parentId, mail, role, confirmByCode })
+  }
+
+  // @tag:family-join-link
+  async confirmParentInvitation (mail: string, code: string): Promise<void> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.confirmParentInvitation({ deviceAuthToken: this.subject.authToken, parentId, mail, code })
+  }
+
+  // @tag:family-join-link
+  async confirmDeviceJoin (code: string): Promise<void> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.confirmDeviceJoin({ deviceAuthToken: this.subject.authToken, parentId, code })
+  }
+
+  // @tag:family-join-link
+  async sendInvitationMail (mail: string, link: string): Promise<void> {
+    const parentId = this.parentUserId(await this.sync())
+    await this.api.sendInvitationMail({ deviceAuthToken: this.subject.authToken, parentId, mail, link })
   }
 
   // @tag:adult-role
@@ -134,9 +152,9 @@ export class SyncClient {
   }
 
   // @tag:family-join-google
-  async setChildMail (childUserId: string, mail: string | null): Promise<void> {
+  async setChildMail (childUserId: string, mail: string | null, confirmByCode = false): Promise<void> {
     const parentId = this.parentUserId(await this.sync())
-    await this.api.setChildMail({ deviceAuthToken: this.subject.authToken, parentId, childUserId, mail })
+    await this.api.setChildMail({ deviceAuthToken: this.subject.authToken, parentId, childUserId, mail, confirmByCode })
   }
 
   // @tag:adult-role
