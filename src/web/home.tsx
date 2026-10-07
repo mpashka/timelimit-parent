@@ -323,14 +323,42 @@ function ModeBox () {
     )
   }
 
-  const status = view.activeSchedule === 'sleep' && morning !== null
+  const liftedUntil = view.child.disableLimitsUntil
+  const status = liftedUntil > now
+    ? <><b>Все ограничения сняты</b> {formatUntil(liftedUntil, now, tz)}</>
+    : view.activeSchedule === 'sleep' && morning !== null
     ? <><b>Сейчас Сон</b> {formatUntil(morning, now, tz)}</>
     : view.activeSchedule === 'study' && activeBan
       ? <><b>Сейчас Учёба</b> {formatUntil(banEndsAt(activeBan, now, tz), now, tz)}</>
       : <><b>Сейчас можно</b>{view.sleep && view.sleep.start > now ? <span class='muted'> · Сон с {clockOf(view.sleep.start)}</span> : null}</>
   return (
     <section class='card mode'>
-      <div>{status}</div>
+      {liftedUntil > now
+        ? (
+          <div class='row'>
+            <span>{status}</span>
+            <ActionButton class='primary' work={() => ({
+              key: 'lift-off',
+              intent: 'allow',
+              body: { until: 0 },
+              done: 'Ограничения снова действуют',
+              undo: () => ({ intent: 'allow', body: { until: liftedUntil } })
+            })}>Вернуть</ActionButton>
+          </div>
+          )
+        : <div>{status}</div>}
+      {view.unassigned.map((device) => (
+        <div class='row' key={device.deviceId}>
+          <span><b>{device.name}</b> без ограничений</span>
+          <ActionButton work={() => ({
+            key: `assign-${device.deviceId}`,
+            intent: 'device-assign',
+            body: { device: device.deviceId, assigned: true },
+            done: `${device.name}: ограничения снова действуют`,
+            undo: () => ({ intent: 'device-assign', body: { device: device.deviceId, assigned: false } })
+          })}>Вернуть</ActionButton>
+        </div>
+      ))}
       <div class='row'>
         <span>Закрыть всё</span>
         <div class='chips'>

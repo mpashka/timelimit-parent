@@ -106,6 +106,10 @@ export function parseUntil (text: string, now: number, timeZone: string): number
     const today = timestampAt({ dayOfEpoch: local.dayOfEpoch, minuteOfDay: minute }, timeZone)
     return today > now ? today : timestampAt({ dayOfEpoch: local.dayOfEpoch + 1, minuteOfDay: minute }, timeZone)
   }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parsed = Date.parse(value)
+    if (!Number.isNaN(parsed)) return timestampAt({ dayOfEpoch: Math.round(parsed / 86400000), minuteOfDay: 0 }, timeZone)
+  }
   if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
     const parsed = Date.parse(value)
     if (!Number.isNaN(parsed)) return parsed

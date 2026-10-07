@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { parseDays } from '../src/shared/time.ts'
-import { banEndsAt, banLabel, BffError, errorText, type FailureKind, formatCountdown, formatDuration, formatUntil } from '../src/web/format.ts'
+import { banEndsAt, banLabel, BffError, errorText, type FailureKind, formatCountdown, formatDuration, formatUntil, liftStep } from '../src/web/format.ts'
 import { moscow } from './helpers.ts'
 
 test('durations read as minutes, hours and hours with padded minutes', () => {
@@ -46,4 +46,9 @@ test('no connection and an unsupported server say what to do; anything else is s
 
 test('countdown shows hours, padded minutes and seconds and stops at zero', () => {
   assert.deepEqual([3 * 3600000, 3 * 3600000 - 1, 61500, 0, -1000].map(formatCountdown), ['3:00:00', '3:00:00', '0:01:02', '0:00:00', '0:00:00'])
+})
+
+// @tag:lift-limits
+test('«+» and «−» on lifted limits step by the hour under a day left, by the day above', () => {
+  assert.deepEqual([3600000, 24 * 3600000, 24 * 3600000 + 1].map((left) => liftStep(left, 0)), [3600000, 3600000, 24 * 3600000])
 })

@@ -148,7 +148,8 @@ const viewNow = (context: ViewContext) => {
     activeSchedule: overview.bans.filter((ban) => ban.activeNow).map((ban) => scheduleKind(ban)).find((kind) => kind !== null) ?? null,
     ...today,
     appRules: overview.child.appRules ?? [],
-    devices: devicesOf(context, childId)
+    devices: devicesOf(context, childId),
+    unassigned: unassignedDevices(context).map(({ deviceId, name }) => ({ deviceId, name }))
   }
 }
 
@@ -211,15 +212,20 @@ const viewApp = (packageName: string, context: ViewContext) => {
   }
 }
 
+// @tag:lift-limits
+/** A tablet nobody is chosen on limits nothing, which is how a parent lifts the limits off one tablet. */
+const unassignedDevices = (context: ViewContext) => {
+  const users = new Set(context.state.users.data.map((user) => user.id))
+  return context.state.devices.data.filter((device) => !users.has(device.currentUserId))
+}
+
 // @tag:device-state
 const viewDevices = (context: ViewContext) => {
   const childId = requireChild(context)
-  const users = new Set(context.state.users.data.map((user) => user.id))
   const { toDay } = usageDays(context.state, childId, context.now)
   return {
     devices: devicesOf(context, childId),
-    unassigned: context.state.devices.data
-      .filter((device) => !users.has(device.currentUserId))
+    unassigned: unassignedDevices(context)
       .map((device) => ({ ...device, status: deviceStatus(context.state, device.deviceId, context.now, null, toDay, labelsOf(context)) })),
     appUsageProblem: usageProblem(context)
   }

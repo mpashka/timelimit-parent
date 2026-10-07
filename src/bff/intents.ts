@@ -238,6 +238,12 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
     return renameDevice({ device: findDevice(context.state, str(body, 'device')), name })
   },
 
+  // @tag:lift-limits
+  'device-assign': (context, body) => {
+    const { deviceId } = findDevice(context.state, str(body, 'device'))
+    return [{ type: 'SET_DEVICE_USER', deviceId, userId: bool(body, 'assigned') ? child(context, body).id : '' }]
+  },
+
   // @tag:adult-role
   'adult-rename': (context, body) => {
     const name = body.name

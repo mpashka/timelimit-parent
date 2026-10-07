@@ -4,7 +4,7 @@ import { clockOf, formatDuration } from './format.ts'
 import { DEVICE_FLAGS, isFlagIneffective, NOT_DEVICE_OWNER, type DeviceFlag } from '../shared/device-flags.ts'
 import { LABEL_MAX, labelProblem } from '../shared/label.ts'
 import { useState } from 'preact/hooks'
-import { RowMenu, SubmitButton, Switch, useApp, useBusy, useScreen, type Work } from './ui.tsx'
+import { ActionButton, RowMenu, SubmitButton, Switch, useApp, useBusy, useScreen, type Work } from './ui.tsx'
 
 // @tag:device-state
 
@@ -15,8 +15,16 @@ export function statusText (device: DeviceWithStatus): string {
   return status.seen ? `не в сети с ${clockOf(status.seen)}` : 'не выходил на связь с перезапуска сервера'
 }
 
-export function DeviceLine ({ device }: { device: DeviceWithStatus }) {
+export function DeviceLine ({ device, assigned }: { device: DeviceWithStatus, assigned: boolean }) {
   const [draft, setDraft] = useState<string | null>(null)
+  // @tag:lift-limits
+  const assign = (to: boolean) => (): Work => ({
+    key: `assign-${device.deviceId}`,
+    intent: 'device-assign',
+    body: { device: device.deviceId, assigned: to },
+    done: `${device.name}: ${to ? 'ограничения снова действуют' : 'ограничения сняты'}`,
+    undo: () => ({ intent: 'device-assign', body: { device: device.deviceId, assigned: !to } })
+  })
   if (draft !== null) return <li><DeviceNameForm device={device} draft={draft} setDraft={setDraft} /></li>
   return (
     <li class='device-line'>
@@ -25,6 +33,9 @@ export function DeviceLine ({ device }: { device: DeviceWithStatus }) {
       {device.status.todayMs !== null ? <b>{formatDuration(device.status.todayMs)}</b> : null}
       <RowMenu class='act' title={device.name} subtitle={statusText(device)}>
         <button type='button' class='item' onClick={() => setDraft(device.name)}>Переименовать</button>
+        {assigned
+          ? <ActionButton class='item' work={assign(false)}>Снять ограничения с планшета</ActionButton>
+          : <ActionButton class='item' work={assign(true)}>Вернуть ограничения</ActionButton>}
       </RowMenu>
     </li>
   )
@@ -104,15 +115,15 @@ export function Devices () {
     <>
       <section class='card'>
         <h2>Планшеты {child.name}</h2>
-        {view.devices.length === 0 ? <p><b>Детский планшет ещё не подключён</b> — пока ограничивать нечего.</p> : <ul class='plain'>{view.devices.map((device) => <Fragment key={device.deviceId}><DeviceLine device={device} /><DeviceFlags device={device} /></Fragment>)}</ul>}
+        {view.devices.length === 0 ? <p><b>Детский планшет ещё не подключён</b> — пока ограничивать нечего.</p> : <ul class='plain'>{view.devices.map((device) => <Fragment key={device.deviceId}><DeviceLine device={device} assigned /><DeviceFlags device={device} /></Fragment>)}</ul>}
         {view.appUsageProblem ? <p class='muted small'>Время за сегодня недоступно: {view.appUsageProblem}</p> : null}
       </section>
       {view.unassigned.length > 0
         ? (
           <section class='card'>
             <h2>Подключены, ребёнок не выбран</h2>
-            <ul class='plain'>{view.unassigned.map((device) => <DeviceLine key={device.deviceId} device={device} />)}</ul>
-            <p class='muted small'>Выберите «{child.name}» на самом планшете.</p>
+            <ul class='plain'>{view.unassigned.map((device) => <DeviceLine key={device.deviceId} device={device} assigned={false} />)}</ul>
+            <p class='muted small'>На этих планшетах TimeLimit ничего не ограничивает. «Вернуть ограничения» в меню ⋮ отдаёт планшет {child.name} с его настройками.</p>
           </section>
           )
         : null}

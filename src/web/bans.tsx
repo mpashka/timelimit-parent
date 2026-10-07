@@ -1,8 +1,8 @@
 import { useState } from 'preact/hooks'
 import { SCHEDULE_SHAPE_HINT, type ScheduleKind, scheduleKind, scheduleWindow } from '../shared/schedules.ts'
-import { formatClock, localTime, parseClock } from '../shared/time.ts'
+import { formatClock, localTime, parseClock, parseUntil } from '../shared/time.ts'
 import type { Ban, BansView } from './api.ts'
-import { ALL_DAYS, type BanSpec, banKey, banLabel, clockAfter, DAY_NAMES, formatUntil, MINUTE_MAX } from './format.ts'
+import { ALL_DAYS, type BanSpec, banKey, banLabel, clockAfter, DAY_NAMES, formatUntil, liftStep, MINUTE_MAX } from './format.ts'
 import { ActionButton, SubmitButton, Switch, useApp, useBusy, useScreen, type Work } from './ui.tsx'
 
 // @tag:parent-console
@@ -26,12 +26,15 @@ const SCHEDULES: Record<ScheduleKind, { title: string, spec: BanSpec }> = {
 
 export function Bans () {
   const view = useScreen<BansView>()
+  const { now } = useApp()
   const [editing, setEditing] = useState<string | null>(null)
   const title = (id: string) => view.categories.find((c) => c.id === id)?.title ?? id
   const others = view.bans.some((ban) => !ban.kind)
 
+  const lifted = view.child.disableLimitsUntil > now
   return (
     <>
+      {lifted ? <LiftLimits /> : null}
       {(['sleep', 'study'] as const).map((kind) => (
         <Schedule key={kind} kind={kind} editing={editing === kind} onEdit={() => setEditing(kind)} onClose={() => setEditing(null)} />
       ))}
@@ -60,6 +63,62 @@ export function Bans () {
           </section>
           )
         : null}
+      {lifted ? null : <details class='others'><summary>Снять все ограничения на время</summary><LiftLimits /></details>}
+    </>
+  )
+}
+
+const HOUR = 3600000
+
+// @tag:lift-limits
+function LiftLimits () {
+  const view = useScreen<BansView>()
+  const { now, child } = useApp()
+  const tz = child.timeZone
+  const until = view.child.disableLimitsUntil
+  const lifted = until > now
+  const [date, setDate] = useState('')
+  const previous = lifted ? until : 0
+  const allow = (to: number, key: string, done: string) => (): Work => ({
+    key: `lift-${key}`,
+    intent: 'allow',
+    body: { until: to },
+    done,
+    undo: () => ({ intent: 'allow', body: { until: previous } })
+  })
+  const liftUntil = (to: number, key: string) => allow(to, key, `Все ограничения сняты ${formatUntil(to, now, tz)}`)
+  const today = localTime(now, tz).dayOfEpoch
+  const dateMin = new Date((today + 1) * 86400000).toISOString().slice(0, 10)
+  const dateUntil = date === '' ? null : parseUntil(date, now, tz)
+
+  if (lifted) {
+    const step = liftStep(until, now)
+    const stepLabel = step === HOUR ? 'час' : 'сутки'
+    return (
+      <section class='card mode'>
+        <div><b>Все ограничения сняты</b> {formatUntil(until, now, tz)}</div>
+        <p class='muted small'>Лимиты, Сон, Учёба и другие запреты не действуют; настройки сохранены и вернутся сами.</p>
+        <div class='row'>
+          <div class='chips'>
+            <ActionButton disabled={until - step <= now} work={liftUntil(until - step, 'minus')}>− {stepLabel}</ActionButton>
+            <ActionButton work={liftUntil(until + step, 'plus')}>+ {stepLabel}</ActionButton>
+          </div>
+          <ActionButton class='primary' work={allow(0, 'off', 'Ограничения снова действуют')}>Вернуть</ActionButton>
+        </div>
+      </section>
+    )
+  }
+  return (
+    <>
+      <p class='muted small'>Лимиты, Сон, Учёба и другие запреты перестанут действовать до выбранного срока, а настройки останутся и вернутся сами. «Закрыть всё» и фильтр сайтов продолжают действовать. Снять ограничения с одного планшета — в его меню на экране «Планшеты».</p>
+      <div class='chips'>
+        <ActionButton work={liftUntil(now + HOUR, 'hour')}>Час</ActionButton>
+        <ActionButton work={liftUntil(now + 24 * HOUR, 'day')}>Сутки</ActionButton>
+      </div>
+      <div class='row'>
+        <label>До даты <input type='date' min={dateMin} value={date} onInput={(event) => setDate(event.currentTarget.value)} /></label>
+        <ActionButton disabled={dateUntil === null || dateUntil <= now} work={liftUntil(dateUntil ?? now, 'date')}>Снять</ActionButton>
+      </div>
     </>
   )
 }

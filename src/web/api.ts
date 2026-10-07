@@ -124,6 +124,7 @@ export interface NowView {
   bans: Ban[]
   unassignedApps: unknown[] | null
   devices: DeviceWithStatus[]
+  unassigned: Array<{ deviceId: string, name: string }> // @tag:lift-limits
   allowances: AppAllowance[]
   apps: AppTime[] | null
   newApps: NewApp[]
@@ -161,6 +162,7 @@ export interface RequestsView {
 export type CodeView = { code: string, validUntil: number } | null
 
 export interface BansView {
+  child: Person
   bans: Ban[]
   legacyBans: Ban[]
   categories: Array<NamedCategory & { parentId: string | null }>

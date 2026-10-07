@@ -12,7 +12,7 @@ import { fixtureState, moscow } from './helpers.ts'
 import { buildIntent } from '../src/bff/intents.ts'
 import { buildView } from '../src/bff/views.ts'
 import { scheduleWindow, sleepWindow } from '../src/shared/schedules.ts'
-import { timestampAt } from '../src/shared/time.ts'
+import { parseUntil, timestampAt } from '../src/shared/time.ts'
 
 test('parent code is RFC 6238 TOTP: the SHA-1 test vector at T=59 gives 287082', () => {
   assert.deepEqual(parentCode('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', 59_000), { code: '287082', validUntil: 60_000 })
@@ -89,6 +89,21 @@ test('a tablet is renamed by its id with the same name check as a category; the 
   assert.deepEqual(buildIntent('device-rename', context, { device: 'devC01', name: ' Планшет Тихона ' }), [{ type: 'UPDATE_DEVICE_NAME', deviceId: 'devC01', name: 'Планшет Тихона' }])
   assert.deepEqual(buildIntent('device-rename', context, { device: 'devC01', name: 'Tablet' }), [])
   assert.throws(() => buildIntent('device-rename', context, { device: 'devC01', name: '  ' }), /bad tablet name/)
+})
+
+// @tag:lift-limits
+test('lifting limits off a tablet unassigns it, and the home screen offers it back', () => {
+  const state = fixtureState()
+  const context = { state, now: 0 }
+  assert.deepEqual(buildIntent('device-assign', context, { device: 'devC01', assigned: false }), [{ type: 'SET_DEVICE_USER', deviceId: 'devC01', userId: '' }])
+  assert.deepEqual(buildIntent('device-assign', context, { device: 'devC01', assigned: true, child: 'child1' }), [{ type: 'SET_DEVICE_USER', deviceId: 'devC01', userId: 'child1' }])
+  state.devices.data.find((device) => device.deviceId === 'devC01')!.currentUserId = ''
+  const home = buildView('now', { state, now: moscow(14, 18, 20), childId: 'child1', serverUrl: '', signedInUserId: 'parnt1' }) as { unassigned: Array<{ deviceId: string }> }
+  assert.deepEqual(home.unassigned.map((device) => device.deviceId), ['devC01'])
+})
+
+test('a date without a time lifts limits until the child\'s midnight, not UTC', () => {
+  assert.equal(parseUntil('2026-10-17', 0, 'Europe/Belgrade'), Date.UTC(2026, 9, 16, 22))
 })
 
 test('CLI: request answer and deny parse into the same answers as the console', () => {

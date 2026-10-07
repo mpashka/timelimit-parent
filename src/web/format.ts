@@ -148,3 +148,9 @@ export function errorText (ex: unknown): ErrorText {
       return { title, hint, signInAgain }
   }
 }
+
+const HOUR_MS = 3600000
+const DAY_MS = 24 * HOUR_MS
+
+// @tag:lift-limits
+export const liftStep = (until: number, now: number): number => until - now > DAY_MS ? DAY_MS : HOUR_MS
