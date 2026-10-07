@@ -12,7 +12,7 @@ declare global {
     google?: {
       accounts: {
         id: {
-          initialize (options: { client_id: string, callback: (response: { credential: string }) => void }): void
+          initialize (options: { client_id: string, callback: (response: { credential: string }) => void, use_fedcm_for_button?: boolean }): void
           renderButton (element: HTMLElement, options: Record<string, string>): void
         }
       }
@@ -265,12 +265,12 @@ function AwaitingConfirmation ({ code, form, onSignedIn, onFailed }: { code: str
   )
 }
 
-export function GoogleButton ({ clientId, onCredential, text = 'signin_with' }: { clientId: string, onCredential: (idToken: string) => void, text?: string }) {
+export function GoogleButton ({ clientId, onCredential, text = 'signin_with', fedcm = false }: { clientId: string, onCredential: (idToken: string) => void, text?: string, fedcm?: boolean }) {
   const target = useRef<HTMLDivElement>(null)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     const show = () => {
-      window.google!.accounts.id.initialize({ client_id: clientId, callback: (response) => onCredential(response.credential) })
+      window.google!.accounts.id.initialize({ client_id: clientId, callback: (response) => onCredential(response.credential), use_fedcm_for_button: fedcm })
       window.google!.accounts.id.renderButton(target.current!, { theme: 'outline', size: 'large', text, locale: 'ru' })
     }
     if (window.google) return show()

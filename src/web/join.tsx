@@ -60,7 +60,7 @@ export function JoinPage ({ code, googleClientId }: { code: string, googleClient
           <>
             <p>Войдите Google-аккаунтом ребёнка — тем, который родитель вписал в веб-админке.</p>
             {googleClientId
-              ? <GoogleButton clientId={googleClientId} onCredential={(idToken) => attempt(async () => {
+              ? <GoogleButton clientId={googleClientId} fedcm onCredential={(idToken) => attempt(async () => {
                 const { familyName, childName } = await join.preview(idToken)
                 setStep({ name: 'ask', idToken, familyName, childName })
               })} />
