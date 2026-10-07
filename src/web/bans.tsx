@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks'
 import { SCHEDULE_SHAPE_HINT, type ScheduleKind, scheduleKind, scheduleWindow } from '../shared/schedules.ts'
 import { formatClock, localTime, parseClock, parseUntil } from '../shared/time.ts'
 import type { Ban, BansView } from './api.ts'
-import { ALL_DAYS, type BanSpec, banKey, banLabel, clockAfter, DAY_NAMES, formatUntil, liftStep, MINUTE_MAX } from './format.ts'
+import { ALL_DAYS, type BanSpec, banKey, banLabel, clockAfter, DAY_NAMES, formatUntil, HOUR_MS, liftStep, MINUTE_MAX } from './format.ts'
 import { ActionButton, SubmitButton, Switch, useApp, useBusy, useScreen, type Work } from './ui.tsx'
 
 // @tag:parent-console
@@ -68,8 +68,6 @@ export function Bans () {
   )
 }
 
-const HOUR = 3600000
-
 // @tag:lift-limits
 function LiftLimits () {
   const view = useScreen<BansView>()
@@ -93,7 +91,7 @@ function LiftLimits () {
 
   if (lifted) {
     const step = liftStep(until, now)
-    const stepLabel = step === HOUR ? 'час' : 'сутки'
+    const stepLabel = step === HOUR_MS ? 'час' : 'сутки'
     return (
       <section class='card mode'>
         <div><b>Все ограничения сняты</b> {formatUntil(until, now, tz)}</div>
@@ -112,8 +110,8 @@ function LiftLimits () {
     <>
       <p class='muted small'>Лимиты, Сон, Учёба и другие запреты перестанут действовать до выбранного срока, а настройки останутся и вернутся сами. «Закрыть всё» и фильтр сайтов продолжают действовать. Снять ограничения с одного планшета — в его меню на экране «Планшеты».</p>
       <div class='chips'>
-        <ActionButton work={liftUntil(now + HOUR, 'hour')}>Час</ActionButton>
-        <ActionButton work={liftUntil(now + 24 * HOUR, 'day')}>Сутки</ActionButton>
+        <ActionButton work={liftUntil(now + HOUR_MS, 'hour')}>Час</ActionButton>
+        <ActionButton work={liftUntil(now + 24 * HOUR_MS, 'day')}>Сутки</ActionButton>
       </div>
       <div class='row'>
         <label>До даты <input type='date' min={dateMin} value={date} onInput={(event) => setDate(event.currentTarget.value)} /></label>

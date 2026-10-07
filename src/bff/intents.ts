@@ -240,8 +240,14 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
 
   // @tag:lift-limits
   'device-assign': (context, body) => {
-    const { deviceId } = findDevice(context.state, str(body, 'device'))
-    return [{ type: 'SET_DEVICE_USER', deviceId, userId: bool(body, 'assigned') ? child(context, body).id : '' }]
+    const device = findDevice(context.state, str(body, 'device'))
+    const assigned = bool(body, 'assigned')
+    const returnsTo = context.state.users.data.find((user) => user.id === device.defUser && user.type === 'child')
+    if (!assigned && returnsTo && device.defUserTimeout > 0) {
+      throw new BadRequestError(`${device.name} сам вернётся к ${returnsTo.name} при включении экрана`,
+        'На планшете включён автоматический выход к пользователю по умолчанию — выключите его в настройках TimeLimit на планшете, потом снимайте ограничения.')
+    }
+    return [{ type: 'SET_DEVICE_USER', deviceId: device.deviceId, userId: assigned ? child(context, body).id : '' }]
   },
 
   // @tag:adult-role

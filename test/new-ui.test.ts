@@ -102,6 +102,12 @@ test('lifting limits off a tablet unassigns it, and the home screen offers it ba
   assert.deepEqual(home.unassigned.map((device) => device.deviceId), ['devC01'])
 })
 
+test('a tablet that signs back in to the child on its own is not unassigned silently', () => {
+  const state = fixtureState()
+  Object.assign(state.devices.data.find((device) => device.deviceId === 'devC01')!, { defUser: 'child1', defUserTimeout: 60000 })
+  assert.throws(() => buildIntent('device-assign', { state, now: 0 }, { device: 'devC01', assigned: false }), /сам вернётся/)
+})
+
 test('a date without a time lifts limits until the child\'s midnight, not UTC', () => {
   assert.equal(parseUntil('2026-10-17', 0, 'Europe/Belgrade'), Date.UTC(2026, 9, 16, 22))
 })

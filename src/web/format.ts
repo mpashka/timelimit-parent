@@ -149,7 +149,7 @@ export function errorText (ex: unknown): ErrorText {
   }
 }
 
-const HOUR_MS = 3600000
+export const HOUR_MS = 3600000
 const DAY_MS = 24 * HOUR_MS
 
 // @tag:lift-limits

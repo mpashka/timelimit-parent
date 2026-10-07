@@ -306,6 +306,20 @@ function ModeBox () {
     undo: () => ({ intent: 'lock', body: { off: true } })
   })
 
+  // @tag:lift-limits
+  const unassignedRows = view.unassigned.map((device) => (
+    <div class='row' key={device.deviceId}>
+      <span><b>{device.name}</b> без ограничений</span>
+      <ActionButton work={() => ({
+        key: `assign-${device.deviceId}`,
+        intent: 'device-assign',
+        body: { device: device.deviceId, assigned: true },
+        done: `${device.name}: ограничения снова действуют`,
+        undo: () => ({ intent: 'device-assign', body: { device: device.deviceId, assigned: false } })
+      })}>Вернуть</ActionButton>
+    </div>
+  ))
+
   if (locked.length > 0) {
     return (
       <section class='card mode closed'>
@@ -319,6 +333,7 @@ function ModeBox () {
             undo: () => ({ intent: 'lock', body: { until: lockedUntil ?? undefined } })
           })}>Открыть</ActionButton>
         </div>
+        {unassignedRows}
       </section>
     )
   }
@@ -347,18 +362,7 @@ function ModeBox () {
           </div>
           )
         : <div>{status}</div>}
-      {view.unassigned.map((device) => (
-        <div class='row' key={device.deviceId}>
-          <span><b>{device.name}</b> без ограничений</span>
-          <ActionButton work={() => ({
-            key: `assign-${device.deviceId}`,
-            intent: 'device-assign',
-            body: { device: device.deviceId, assigned: true },
-            done: `${device.name}: ограничения снова действуют`,
-            undo: () => ({ intent: 'device-assign', body: { device: device.deviceId, assigned: false } })
-          })}>Вернуть</ActionButton>
-        </div>
-      ))}
+      {unassignedRows}
       <div class='row'>
         <span>Закрыть всё</span>
         <div class='chips'>
