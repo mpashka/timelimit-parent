@@ -104,7 +104,7 @@ label.inline { display: inline-flex; align-items: center; gap: 6px; margin: 4px 
 input, textarea, select {
   font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px;
 }
-label > input:not([type=checkbox]), label > textarea, label > select { display: block; width: 100%; margin-top: 4px; }
+label > input:not([type=checkbox]):not([type=radio]), label > textarea, label > select { display: block; width: 100%; margin-top: 4px; }
 label.inline > input { display: inline-block; width: 6rem; margin: 0; }
 textarea { font-family: ui-monospace, Menlo, monospace; font-size: .9rem; }
 code { font-size: .85em; background: var(--chip); padding: 0 4px; border-radius: 4px; }
@@ -323,7 +323,7 @@ button.danger { background: var(--danger, #c62828); border-color: var(--danger, 
 
 /* @tag:family-join-link */
 .confirm-by-code { margin: 8px 0; }
-.confirm-by-code .help { width: 22px; height: 22px; min-height: 0; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: none; color: var(--text); font-size: 13px; line-height: 1; cursor: pointer; }
+.confirm-by-code .help { width: 22px; height: 22px; min-height: 0; min-width: 0; padding: 0; border-radius: 50%; border: 1px solid var(--muted); background: none; color: var(--text); font-size: 13px; line-height: 1; cursor: pointer; }
 .confirm-by-code p { margin: 4px 0 0 26px; }
 .confirm-code { margin-top: 6px; align-items: flex-end; }
 .confirm-code input { width: 6em; letter-spacing: 0.2em; }
