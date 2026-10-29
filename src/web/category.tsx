@@ -55,7 +55,6 @@ export function CategoryDetails () {
                     {rule.session > 0 ? `, сессия ${formatDuration(rule.session)} / пауза ${formatDuration(rule.pause)}` : ''}
                     {rule.e !== undefined ? ', временное' : ''}
                     {shadowed ? <ExplainedMark mark='!' label='Этот лимит не сработает' open={whyRule === rule.id} toggle={() => setWhyRule(whyRule === rule.id ? null : rule.id)} /> : null}
-                    {shadowed && whyRule === rule.id ? <div class='muted small explained-text'>{shadowedLimitText(category.title, rule, shadowed)}</div> : null}
                   </td>
                 </tr>
                 )
@@ -63,10 +62,14 @@ export function CategoryDetails () {
             </tbody>
           </table>
         </div>
+        {whyRule !== null ? <p class='muted small explained-text'>{shadowedText(category, whyRule)}</p> : null}
       </article>
     </>
   )
 }
+
+const shadowedText = (category: CategoryView, ruleId: string): string =>
+  shadowedLimitText(category.title, category.rules.find((rule) => rule.id === ruleId)!, category.shadowedLimits.find((s) => s.ruleId === ruleId)!)
 
 /** The title is the parent's own words — whatever language, emoji included; the tablet shows it as typed. */
 function CategoryTitle ({ category }: { category: CategoryView }) {
