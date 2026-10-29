@@ -16,7 +16,7 @@ export interface BanSpec {
 }
 
 export interface Loophole {
-  kind: 'no-rule-now' | 'no-rules' | 'limits-disabled' | 'unassigned-apps-category'
+  kind: 'limits-disabled' | 'unassigned-apps-category'
   categoryId: string
 }
 
@@ -98,8 +98,6 @@ export function shadowedLimitText (title: string, rule: { maxTime: number, perDa
 export function loopholeText (loophole: Loophole, titles: Map<string, string>, now: number, timeZone: string, disabledUntil?: number | null): string {
   const title = `«${titles.get(loophole.categoryId) ?? loophole.categoryId}»`
   switch (loophole.kind) {
-    case 'no-rules': return `${title}: нет ни одного правила — приложения работают без ограничений, время не записывается`
-    case 'no-rule-now': return `${title}: сейчас не действует ни одно правило — время не записывается`
     case 'limits-disabled': return `${title}: лимиты сняты ${disabledUntil ? formatUntil(disabledUntil, now, timeZone) : ''}`.trim()
     case 'unassigned-apps-category': return `приложения без категории попадают в ${title}, а она сейчас не ограничена`
   }

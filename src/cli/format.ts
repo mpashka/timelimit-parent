@@ -25,7 +25,6 @@ export function formatOverview (overview: ChildOverview): string {
     if (c.blockedNow) parts.push(c.blockedNow + (c.temporarilyBlocked?.until ? ` until ${localDateTime(c.temporarilyBlocked.until, child.timeZone)}` : ''))
     if (c.blockedByParent) parts.push(`blocked via ${titles.get(c.blockedByParent)}`)
     if (c.limitsDisabledUntil) parts.push(`limits off until ${localDateTime(c.limitsDisabledUntil, child.timeZone)}`)
-    if (!c.countsTimeNow && !c.blockedNow && !c.blockedByParent) parts.push('not counted now')
     return parts.join('; ')
   }
   const rows = overview.categories.map((c) => [

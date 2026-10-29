@@ -134,7 +134,7 @@ const viewNow = (context: ViewContext) => {
       const own = categoryViews.find((item) => item.id === category.id)
       const ids = new Set(descendants(category.id))
       // @tag:category-time
-      // the tablet records a category's time only while a rule of it is active, the app time always
+      // builds before tim-95 recorded a category's time only while a rule of it was active, the app time always
       const appsMs = (today.apps ?? []).filter((app) => app.category !== null && ids.has(app.category.id)).reduce((sum, app) => sum + app.ms, 0)
       return {
         ...category,

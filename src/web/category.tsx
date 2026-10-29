@@ -30,14 +30,13 @@ export function CategoryDetails () {
             </div>
           ))}
         </div>
-        <p class='muted small'>Время записывается, только пока у категории действует правило: ноль не значит, что приложения не открывали.</p>
         <h3>Приложения ({category.apps.length})</h3>
         <ul class='plain'>
           {category.apps.map((app) => <li key={app.packageName}><AppIcon app={app} /> {app.packageName.includes(':') ? app.title : <a href={appHref(app.packageName)}>{app.title}</a>}</li>)}
         </ul>
         <h3>Правила</h3>
         <p class='muted small'>Только просмотр. Сессии, заряд, сети и предупреждения правятся в приложении TimeLimit.</p>
-        {category.rules.length === 0 ? <p class='muted'>Правил нет: время не считается.</p> : null}
+        {category.rules.length === 0 ? <p class='muted'>Правил нет: приложения работают без ограничений, время записывается.</p> : null}
         <div class='scroll'>
           <table>
             <thead><tr><th>дни</th><th>время</th><th>что</th></tr></thead>

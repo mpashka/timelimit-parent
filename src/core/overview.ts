@@ -127,10 +127,11 @@ export interface CategoryOverview {
   limitedByParent: { id: string, remainingMs: number } | null
   /** Limits of the category that cannot close it, see shadowedLimits. */
   shadowedLimits: ShadowedLimit[]
-  countsTimeNow: boolean
+  /** A rule of the category or of an ancestor limits this moment. */
+  limitedNow: boolean
 }
 
-export type LoopholeKind = 'no-rule-now' | 'no-rules' | 'limits-disabled' | 'unassigned-apps-category'
+export type LoopholeKind = 'limits-disabled' | 'unassigned-apps-category'
 
 export interface Loophole {
   kind: LoopholeKind
@@ -253,7 +254,7 @@ export function childOverview (state: FamilyState, childId: string, now: number)
       blockedByParent: null,
       limitedByParent: null,
       shadowedLimits: shadowedLimits(categories, category.id),
-      countsTimeNow: regularRules.length > 0
+      limitedNow: regularRules.length > 0
     })
   }
 
@@ -269,7 +270,7 @@ export function childOverview (state: FamilyState, childId: string, now: number)
         least = parentLeft
         item.limitedByParent = { id: parent.id, remainingMs: parentLeft }
       }
-      if (parent.countsTimeNow) item.countsTimeNow = true
+      if (parent.limitedNow) item.limitedNow = true
       parentId = parent.parentId
     }
   }
@@ -277,18 +278,12 @@ export function childOverview (state: FamilyState, childId: string, now: number)
   const overviews = [...own.values()]
   const loopholes: Loophole[] = []
   for (const item of overviews) {
-    const category = categories.find((c) => c.id === item.id)!
-    const blocked = item.blockedNow !== null || item.blockedByParent !== null
     if (item.limitsDisabledUntil !== null) {
       loopholes.push({ kind: 'limits-disabled', categoryId: item.id, detail: `limits of "${item.title}" are switched off until ${new Date(item.limitsDisabledUntil).toISOString()}` })
-    } else if (category.rules.length === 0 && !blocked && !item.countsTimeNow) {
-      loopholes.push({ kind: 'no-rules', categoryId: item.id, detail: `"${item.title}" has no rules at all: its apps run without limit and their time is not recorded` })
-    } else if (!item.countsTimeNow && !blocked) {
-      loopholes.push({ kind: 'no-rule-now', categoryId: item.id, detail: `no rule of "${item.title}" covers this moment: its apps run freely and the time is not recorded` })
     }
   }
   const unassignedCategory = own.get(child.categoryForNotAssignedApps) ?? null
-  if (unassignedCategory && !unassignedCategory.countsTimeNow && !unassignedCategory.blockedNow) {
+  if (unassignedCategory && !unassignedCategory.limitedNow && !unassignedCategory.blockedNow) {
     loopholes.push({ kind: 'unassigned-apps-category', categoryId: unassignedCategory.id, detail: `apps without a category fall into "${unassignedCategory.title}", which is not limited now` })
   }
 

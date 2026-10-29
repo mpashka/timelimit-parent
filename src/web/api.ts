@@ -62,7 +62,6 @@ export interface CategoryNow {
   blockedByParent: string | null
   limitedByParent: { id: string, remainingMs: number } | null
   shadowedLimits: ShadowedLimit[]
-  countsTimeNow: boolean
   dailyLimits: Rule[]
   parentId: string | null
   /** Every app the category holds, whether or not it was used today. */

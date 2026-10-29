@@ -460,8 +460,7 @@ function CategoryMenu ({ category }: { category: CategoryNow }) {
 
   const subtitle = [
     remaining === null ? 'без лимита сейчас' : `осталось ${formatDuration(remaining)}${category.limitedByParent ? ` — столько у «${title(category.limitedByParent.id)}»` : ''}`,
-    category.extraTimeMs > 0 ? `доп. ${formatDuration(category.extraTimeMs)}` : '',
-    !category.countsTimeNow && !category.blockedNow && !category.blockedByParent && !category.limitsDisabledUntil ? 'время сейчас не считается' : ''
+    category.extraTimeMs > 0 ? `доп. ${formatDuration(category.extraTimeMs)}` : ''
   ].filter(Boolean).join(' · ')
 
   return (

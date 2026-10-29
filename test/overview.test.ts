@@ -9,7 +9,7 @@ import { fixtureState, moscow } from './helpers.ts'
 
 const fixtureStateWith = (status: ServerDataStatus): FamilyState => mergeServerStatus(createEmptyState(), status)
 
-test('Monday 15:00: games have 15 min left plus 10 min extra time, study and allowed apps are loopholes', () => {
+test('Monday 15:00: games have 15 min left plus 10 min extra time, categories without a rule now are no loophole', () => {
   const overview = childOverview(fixtureState(), 'child1', moscow(14, 15))
   const games = overview.categories.find((c) => c.id === 'games1')!
   assert.equal(overview.dayOfEpoch, 20710)
@@ -18,7 +18,7 @@ test('Monday 15:00: games have 15 min left plus 10 min extra time, study and all
   assert.deepEqual(games.remaining, { default: 900000, includingExtraTime: 1500000 })
   assert.equal(games.blockedNow, null)
   assert.deepEqual(overview.categories.map((c) => c.title), ['Разрешено', 'Игры', 'YouTube', 'Учёба'])
-  assert.deepEqual(overview.loopholes.map((l) => [l.kind, l.categoryId]), [['no-rules', 'allow1'], ['no-rule-now', 'study1']])
+  assert.deepEqual(overview.loopholes, [])
   assert.equal(overview.bans.length, 1)
   assert.equal(overview.bans[0].activeNow, false)
   assert.equal(overview.unassignedApps, null)
@@ -29,7 +29,6 @@ test('the Monday night ban holds on Tuesday 06:00 and blocks the sub-category th
   assert.equal(overview.bans[0].activeNow, true)
   assert.equal(overview.categories.find((c) => c.id === 'games1')!.blockedNow, 'ban')
   assert.equal(overview.categories.find((c) => c.id === 'yt0001')!.blockedByParent, 'games1')
-  assert.deepEqual(overview.loopholes.map((l) => l.categoryId), ['allow1'])
 })
 
 test('the Friday night ban reaches Saturday morning but no Sunday morning', () => {
