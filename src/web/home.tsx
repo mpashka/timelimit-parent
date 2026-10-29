@@ -1,10 +1,10 @@
 import type { AppFace, AppRule, AppTime, Ban, CategoryNow, DeviceWithStatus, NowView } from './api.ts'
-import { ALL_DAYS, banEndsAt, clockOf, dailyLimitOf, formatDuration, formatUntil, loopholeText } from './format.ts'
+import { ALL_DAYS, banEndsAt, clockOf, dailyLimitOf, formatDuration, formatUntil, loopholeText, shadowedLimitText } from './format.ts'
 import { useState } from 'preact/hooks'
 import { AppIcon, appHref, NewAppRow, ruleText } from './apps.tsx'
 import { statusText } from './devices.tsx'
 import { countAdvancedOpened, readLocal, writeLocal } from './store.ts'
-import { ActionButton, RowMenu, useApp, useScreen } from './ui.tsx'
+import { ActionButton, ExplainedMark, RowMenu, useApp, useScreen } from './ui.tsx'
 
 // @tag:parent-console
 
@@ -208,6 +208,16 @@ function stateText (category: CategoryNow, view: NowView, now: number): string |
   return null
 }
 
+/** Own time left, or less when an ancestor runs out first: its time is spent too. */
+// @tag:category-limits
+const remainingOf = (category: CategoryNow): number | null =>
+  category.limitedByParent?.remainingMs ?? category.remaining?.includingExtraTime ?? null
+
+const titleOf = (view: NowView, id: string): string => view.categories.find((c) => c.id === id)?.title ?? id
+
+const parentLimitText = (category: CategoryNow, parentTitle: string): string =>
+  `Своих у «${category.title}» ${category.remaining ? `осталось ${formatDuration(category.remaining.includingExtraTime)}` : 'лимитов сейчас нет'}, но её приложения тратят и время «${parentTitle}» — там осталось ${formatDuration(category.limitedByParent!.remainingMs)}.`
+
 function CategoryNode ({ category, apps, deviceChosen, last, open, toggle }: {
   category: CategoryNow, apps: AppTime[], deviceChosen: boolean, last: boolean, open: boolean, toggle: () => void
 }) {
@@ -215,7 +225,7 @@ function CategoryNode ({ category, apps, deviceChosen, last, open, toggle }: {
   const view = useScreen<NowView>()
   const ids = descendantIds(view.categories, category.id)
   const deviceMs = apps.filter((app) => app.category !== null && ids.has(app.category.id)).reduce((sum, app) => sum + app.ms, 0)
-  const remaining = category.remaining?.includingExtraTime ?? null
+  const remaining = remainingOf(category)
   const limit = category.limitNowMs
   const state = stateText(category, view, now)
   const blocked = category.blockedNow !== null || category.blockedByParent !== null
@@ -242,6 +252,7 @@ function CategoryNode ({ category, apps, deviceChosen, last, open, toggle }: {
             {value}
             {limit !== null && !deviceChosen ? <small class='muted'>{formatDuration(category.usedTodayMs)} из {formatDuration(limit)}</small> : null}
             {category.week !== null && !deviceChosen ? <small class={weekSpent(category) ? 'state closed' : 'muted'}>неделя {formatDuration(category.week.usedMs)} из {formatDuration(category.week.limitMs)}</small> : null}
+            {category.limitedByParent !== null && !blocked && !deviceChosen ? <small class='muted'>раньше кончится «{titleOf(view, category.limitedByParent.id)}»</small> : null}
           </span>
         </button>
         <CategoryMenu category={category} />
@@ -419,8 +430,8 @@ function CategoryMenu ({ category }: { category: CategoryNow }) {
   const { now } = useApp()
   const view = useScreen<NowView>()
   const tz = view.child.timeZone
-  const title = (id: string) => view.categories.find((c) => c.id === id)?.title ?? id
-  const remaining = category.remaining?.includingExtraTime ?? null
+  const title = (id: string) => titleOf(view, id)
+  const remaining = remainingOf(category)
   const limit = category.limitNowMs
   const activeBan: Ban | undefined = view.bans.find((ban) => ban.activeNow && ban.categoryIds.includes(category.id))
   const banned = category.blockedNow === 'ban' || category.blockedNow === 'legacy-blocked-time'
@@ -448,7 +459,7 @@ function CategoryMenu ({ category }: { category: CategoryNow }) {
       })
 
   const subtitle = [
-    remaining === null ? 'без лимита сейчас' : `осталось ${formatDuration(remaining)}`,
+    remaining === null ? 'без лимита сейчас' : `осталось ${formatDuration(remaining)}${category.limitedByParent ? ` — столько у «${title(category.limitedByParent.id)}»` : ''}`,
     category.extraTimeMs > 0 ? `доп. ${formatDuration(category.extraTimeMs)}` : '',
     !category.countsTimeNow && !category.blockedNow && !category.blockedByParent && !category.limitsDisabledUntil ? 'время сейчас не считается' : ''
   ].filter(Boolean).join(' · ')
@@ -487,6 +498,9 @@ function CategoryMenu ({ category }: { category: CategoryNow }) {
         ? <ActionButton class='item' work={() => ({ key: `relimit-${category.id}`, intent: 'allow', body: { category: category.id, until: 0 }, done: `Лимиты «${category.title}» снова действуют`, undo: () => ({ intent: 'allow', body: { category: category.id, until: category.limitsDisabledUntil } }) })}>Вернуть лимиты</ActionButton>
         : null}
       {category.blockedByParent ? <div class='item-label'>Закрыто вместе с «{title(category.blockedByParent)}»</div> : null}
+      {category.limitedByParent && !category.blockedByParent
+        ? <div class='item-label'>{parentLimitText(category, title(category.limitedByParent.id))}</div>
+        : null}
       <a class='item' href={`#/category/${category.id}`} onClick={countAdvancedOpened}>Правила и неделя ›</a>
     </RowMenu>
   )
@@ -497,7 +511,9 @@ const LIMIT_PRESETS = [30, 60, 90, 120]
 /** The category's daily limit, edited on its own row: ready values in one tap, like an app's own limit. */
 // @tag:category-limits
 function DailyLimit ({ category }: { category: CategoryNow }) {
+  const [whyOpen, setWhyOpen] = useState(false)
   const current = dailyLimitOf(category.dailyLimits)
+  const shadowed = category.shadowedLimits.find((s) => category.dailyLimits.some((rule) => rule.id === s.ruleId)) ?? null
   const presets = current.minutes !== null && !LIMIT_PRESETS.includes(current.minutes) ? [...LIMIT_PRESETS, current.minutes].sort((a, b) => a - b) : LIMIT_PRESETS
   // ponytail: undo puts back one limit for all days; a category whose days had different limits
   // (only the Android app can set that) comes back as the single limit shown here
@@ -510,7 +526,7 @@ function DailyLimit ({ category }: { category: CategoryNow }) {
   })
   return (
     <div class='limit-line'>
-      <span class='muted small'>Лимит в день</span>
+      <span class='muted small'>Лимит в день{shadowed ? <ExplainedMark mark='!' label='Этот лимит не сработает' open={whyOpen} toggle={() => setWhyOpen(!whyOpen)} /> : null}</span>
       <div class='chips'>
         <ActionButton class={current.minutes === null ? 'primary' : ''} disabled={current.minutes === null} work={change(null)}>нет</ActionButton>
         {presets.map((minutes) => (
@@ -519,6 +535,7 @@ function DailyLimit ({ category }: { category: CategoryNow }) {
           </ActionButton>
         ))}
       </div>
+      {shadowed && whyOpen ? <div class='muted small explained-text'>{shadowedLimitText(category.title, category.dailyLimits.find((rule) => rule.id === shadowed.ruleId)!, shadowed)}</div> : null}
       {current.mixed ? <div class='muted small'>В приложении на планшете заданы разные лимиты по дням (показан наименьший); нажатие заменит их одним на все дни.</div> : null}
     </div>
   )

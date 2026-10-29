@@ -44,6 +44,8 @@ export interface Rule {
   e?: number
 }
 
+export interface ShadowedLimit { ruleId: string, byCategoryId: string, byTitle: string, byMaxTime: number }
+
 export interface CategoryNow {
   id: string
   title: string
@@ -58,6 +60,8 @@ export interface CategoryNow {
   temporarilyBlocked: { until: number | null } | null
   blockedNow: 'temporarily-blocked' | 'ban' | 'legacy-blocked-time' | 'limit-reached' | null
   blockedByParent: string | null
+  limitedByParent: { id: string, remainingMs: number } | null
+  shadowedLimits: ShadowedLimit[]
   countsTimeNow: boolean
   dailyLimits: Rule[]
   parentId: string | null
@@ -180,6 +184,7 @@ export interface CategoryView {
   id: string
   title: string
   rules: Rule[]
+  shadowedLimits: ShadowedLimit[]
   apps: AppFace[]
   week: Array<{ day: number, ms: number }>
 }

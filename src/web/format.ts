@@ -87,6 +87,14 @@ export function dailyLimitOf (rules: Array<{ maxTime: number, dayMask: number }>
   return { minutes: Math.round(Math.min(...rules.map((r) => r.maxTime)) / 60000), mixed: !uniform }
 }
 
+// @tag:category-limits
+export function shadowedLimitText (title: string, rule: { maxTime: number, perDay: boolean }, shadowed: { byTitle: string, byMaxTime: number }): string {
+  const per = rule.perDay ? 'в день' : 'в неделю'
+  return `Лимит ${formatDuration(rule.maxTime)} ${per} у «${title}» не сработает: её приложения тратят и время «${shadowed.byTitle}», ` +
+    `а там лимит ${formatDuration(shadowed.byMaxTime)} ${per} — «${shadowed.byTitle}» закроет их раньше. ` +
+    `Уменьшите лимит здесь или увеличьте у «${shadowed.byTitle}».`
+}
+
 export function loopholeText (loophole: Loophole, titles: Map<string, string>, now: number, timeZone: string, disabledUntil?: number | null): string {
   const title = `«${titles.get(loophole.categoryId) ?? loophole.categoryId}»`
   switch (loophole.kind) {

@@ -1,10 +1,10 @@
 import type { CategoryView } from './api.ts'
 import { AppIcon, appHref } from './apps.tsx'
-import { clockAfter, dayLabel, formatDaysRu, formatDuration } from './format.ts'
+import { clockAfter, dayLabel, formatDaysRu, formatDuration, shadowedLimitText } from './format.ts'
 import { formatClock } from '../shared/time.ts'
 import { useState } from 'preact/hooks'
 import { LABEL_MAX, labelProblem } from '../shared/label.ts'
-import { SubmitButton, useApp, useBusy, useScreen } from './ui.tsx'
+import { ExplainedMark, SubmitButton, useApp, useBusy, useScreen } from './ui.tsx'
 
 // @tag:parent-console @tag:category-limits
 
@@ -13,6 +13,7 @@ const MINUTE = 60000
 /** «подробнее» on a category row: the week, the apps and the rules as the tablet keeps them, read-only. */
 export function CategoryDetails () {
   const category = useScreen<CategoryView>()
+  const [whyRule, setWhyRule] = useState<string | null>(null)
   const max = Math.max(1, ...category.week.map((item) => item.ms))
   return (
     <>
@@ -41,7 +42,9 @@ export function CategoryDetails () {
           <table>
             <thead><tr><th>дни</th><th>время</th><th>что</th></tr></thead>
             <tbody>
-              {category.rules.map((rule) => (
+              {category.rules.map((rule) => {
+                const shadowed = category.shadowedLimits.find((s) => s.ruleId === rule.id)
+                return (
                 <tr key={rule.id}>
                   <td>{formatDaysRu(rule.dayMask)}</td>
                   <td>{formatClock(rule.start)}–{clockAfter(rule.end)}</td>
@@ -51,9 +54,12 @@ export function CategoryDetails () {
                       : `лимит ${formatDuration(rule.maxTime)}${rule.perDay ? ' в день' : ' в неделю'}`}
                     {rule.session > 0 ? `, сессия ${formatDuration(rule.session)} / пауза ${formatDuration(rule.pause)}` : ''}
                     {rule.e !== undefined ? ', временное' : ''}
+                    {shadowed ? <ExplainedMark mark='!' label='Этот лимит не сработает' open={whyRule === rule.id} toggle={() => setWhyRule(whyRule === rule.id ? null : rule.id)} /> : null}
+                    {shadowed && whyRule === rule.id ? <div class='muted small explained-text'>{shadowedLimitText(category.title, rule, shadowed)}</div> : null}
                   </td>
                 </tr>
-              ))}
+                )
+              })}
             </tbody>
           </table>
         </div>

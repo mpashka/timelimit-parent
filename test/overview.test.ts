@@ -78,3 +78,14 @@ test('a spent weekly limit closes games with time left today and is shown apart 
   assert.equal(setDailyLimit({ category: childCategories(fixtureStateWith(status), 'child1').find((c) => c.id === 'games1')!, minutes: 30, days: 31 })
     .some((a) => a.type !== 'CREATE_TIMELIMIT_RULE' && 'ruleId' in a && a.ruleId === 'week01'), false)
 })
+
+// @tag:category-limits
+test('a sub-category with a longer limit than its parent shows the parent time left and the useless limit', () => {
+  const status = fullStatus()
+  status.rules!.find((r) => r.categoryId === 'yt0001')!.rules.push(
+    { id: 'rulY01', extraTime: false, dayMask: 127, maxTime: 2 * 3600000, start: 0, end: 1439, session: 0, pause: 0, perDay: true })
+  const youtube = childOverview(fixtureStateWith(status), 'child1', moscow(14, 15)).categories.find((c) => c.id === 'yt0001')!
+  assert.equal(youtube.remaining!.includingExtraTime, 2 * 3600000)
+  assert.deepEqual(youtube.limitedByParent, { id: 'games1', remainingMs: 1500000 })
+  assert.deepEqual(youtube.shadowedLimits, [{ ruleId: 'rulY01', byCategoryId: 'games1', byTitle: 'Игры', byMaxTime: 3600000 }])
+})

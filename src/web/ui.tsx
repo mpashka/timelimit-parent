@@ -242,6 +242,16 @@ export function RowMenu ({ title, subtitle, children, class: className = '' }: {
   )
 }
 
+/** A round mark beside a setting; pressing it unfolds the explanation under the setting's line. */
+export function ExplainedMark ({ mark, label, open, toggle }: { mark: '?' | '!', label: string, open: boolean, toggle: () => void }) {
+  return (
+    <span class='explained'>
+      <button type='button' class={`help ${mark === '!' ? 'warn' : ''}`} aria-expanded={open} aria-label={label} title={label}
+        onClick={(event) => { event.stopPropagation(); toggle() }}>{mark}</button>
+    </span>
+  )
+}
+
 /** Explains itself in one line; the «?» unfolds why it exists and when it is worth the extra step. */
 // @tag:family-join-link
 export function ConfirmByCodeOption ({ checked, onChange }: { checked: boolean, onChange: (checked: boolean) => void }) {

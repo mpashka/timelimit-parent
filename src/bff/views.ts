@@ -2,7 +2,7 @@ import type { AppUsageItem, LaunchableAppItem, ParentInvitation } from '../core/
 import { appCard, type AppLabels, appTimes, appTitle, deviceStatus, launchablePackages, newApps, packageOf, usageDays } from '../core/apps.ts'
 import { ParentConsoleError } from '../core/errors.ts'
 import { dailyLimitRules } from '../core/operations.ts'
-import { childOverview, findChild, usageHistory } from '../core/overview.ts'
+import { childOverview, findChild, shadowedLimits, usageHistory } from '../core/overview.ts'
 import { parentCode } from '../core/parent-code.ts'
 import { NEW_UI_API_LEVEL, PARENT_SESSION_API_LEVEL, URL_FILTER_API_LEVEL } from '../core/protocol.ts'
 import { answerCategoryId, requestStatus } from '../core/requests.ts'
@@ -359,6 +359,7 @@ function viewCategory (categoryId: string, context: ViewContext) {
     title: category.base?.title ?? category.id,
     parentId: category.base?.parentCategoryId || null,
     rules: category.rules,
+    shadowedLimits: childId ? shadowedLimits(childCategories(context.state, childId), category.id) : [],
     apps: category.apps.map((packageName) => appFace(context, packageName)),
     week: history === null ? [] : history.days.map((day) => ({ day: day.dayOfEpoch, ms: day.byCategory[category.id] ?? 0 }))
   }

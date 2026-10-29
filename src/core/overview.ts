@@ -69,6 +69,43 @@ function dailyLimitNow (rules: ServerRule[]): number | null {
   return daily.length === 0 ? null : Math.min(...daily.map((r) => r.maxTime))
 }
 
+export interface ShadowedLimit {
+  ruleId: string
+  /** The ancestor whose shorter limit of the same days and hours runs out first. */
+  byCategoryId: string
+  byTitle: string
+  byMaxTime: number
+}
+
+const isPlainLimit = (rule: ServerRule): boolean => rule.maxTime > 0 && !isLikeBan(rule) && rule.e === undefined
+
+// @tag:category-limits
+/**
+ * Limits of a category that never close it: an app of a subcategory spends the time of every
+ * ancestor as well, so an ancestor's shorter limit of the same kind over the same days and hours
+ * runs out first. A hint for the parent, not a rule — TimeLimit itself accepts such limits.
+ */
+export function shadowedLimits (categories: CategoryView[], categoryId: string): ShadowedLimit[] {
+  const byId = new Map(categories.map((c) => [c.id, c]))
+  const ancestors: CategoryView[] = []
+  for (let parent = byId.get(byId.get(categoryId)?.base.parentCategoryId ?? ''); parent && parent.id !== categoryId && ancestors.length < 10; parent = byId.get(parent.base.parentCategoryId)) {
+    ancestors.push(parent)
+  }
+  const result: ShadowedLimit[] = []
+  for (const rule of byId.get(categoryId)?.rules ?? []) {
+    if (!isPlainLimit(rule) || rule.session > 0) continue
+    for (const ancestor of ancestors) {
+      const shorter = ancestor.rules.find((p) => isPlainLimit(p) && p.perDay === rule.perDay && p.maxTime < rule.maxTime &&
+        (p.dayMask & rule.dayMask) === rule.dayMask && p.start <= rule.start && p.end >= rule.end)
+      if (shorter) {
+        result.push({ ruleId: rule.id, byCategoryId: ancestor.id, byTitle: ancestor.base.title, byMaxTime: shorter.maxTime })
+        break
+      }
+    }
+  }
+  return result
+}
+
 export type BlockReason = 'temporarily-blocked' | 'ban' | 'legacy-blocked-time' | 'limit-reached'
 
 export interface CategoryOverview {
@@ -86,6 +123,10 @@ export interface CategoryOverview {
   temporarilyBlocked: { until: number | null } | null
   blockedNow: BlockReason | null
   blockedByParent: string | null
+  /** An ancestor with less time left than the category itself: its apps spend that time too, so it closes them first. */
+  limitedByParent: { id: string, remainingMs: number } | null
+  /** Limits of the category that cannot close it, see shadowedLimits. */
+  shadowedLimits: ShadowedLimit[]
   countsTimeNow: boolean
 }
 
@@ -210,15 +251,24 @@ export function childOverview (state: FamilyState, childId: string, now: number)
       temporarilyBlocked: tempBlocked ? { until: base.tempBlockTime === 0 ? null : base.tempBlockTime } : null,
       blockedNow,
       blockedByParent: null,
+      limitedByParent: null,
+      shadowedLimits: shadowedLimits(categories, category.id),
       countsTimeNow: regularRules.length > 0
     })
   }
 
   for (const item of own.values()) {
+    let least = item.remaining?.includingExtraTime ?? Infinity
     for (let parentId = item.parentId, guard = 0; parentId && guard < 10; guard++) {
       const parent = own.get(parentId)
       if (!parent) break
       if (parent.blockedNow && !item.blockedNow) item.blockedByParent = parent.id
+      // @tag:category-limits
+      const parentLeft = parent.remaining?.includingExtraTime ?? Infinity
+      if (parentLeft < least) {
+        least = parentLeft
+        item.limitedByParent = { id: parent.id, remainingMs: parentLeft }
+      }
       if (parent.countsTimeNow) item.countsTimeNow = true
       parentId = parent.parentId
     }
