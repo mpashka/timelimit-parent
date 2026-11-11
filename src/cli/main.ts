@@ -10,7 +10,7 @@ import { exportChild, overlayConfigs, planImport, type PortableConfig } from '..
 import { ParentConsoleError } from '../core/errors.ts'
 import { DEVICE_FLAGS, findDeviceFlag, isFlagIneffective, NOT_DEVICE_OWNER } from '../shared/device-flags.ts'
 import {
-  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, revokeExtraTime, setDailyLimit, setUrlFilter, setWeeklyLimit, unlockChild
+  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, renameDevice, revokeExtraTime, setDailyLimit, setUrlFilter, setWeeklyLimit, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
 import { ALL_DAYS, APP_ICONS_API_LEVEL, CATEGORY_HIDDEN, type ParentAction } from '../core/protocol.ts'
@@ -35,6 +35,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   device ignore-manipulation <device>     forget the device's past manipulation warnings
   device flags <device> [name=on|off]...  experimental flags of the device; without changes lists them
   device launcher <device> [<package>|-]  home screen the launcher flag pins; - clears it, no argument prints it
+  device rename <device> <new name>       the tablet's own words, any language and emoji
   device remove <device>                  remove the device from the family; its app loses the connection
   status [child]                          time used/left, bans, loopholes
   usage [child] [--days N]                used time per category per day
@@ -273,6 +274,9 @@ async function main (): Promise<void> {
         if (args[2] === undefined) return print(`${device.name} (${device.deviceId}): ${device.launcher || 'not named'}`, { deviceId: device.deviceId, launcher: device.launcher })
         return apply(session, [{ type: 'UPDATE_DEVICE_LAUNCHER', deviceId: device.deviceId, packageName: args[2] === '-' ? '' : args[2] }])
       }
+      if (args[0] === 'rename') {
+        return apply(session, renameDevice({ device: findDevice(state, need(args[1], 'device id or name')), name: args.slice(2).join(' ') }))
+      }
       if (args[0] === 'remove') {
         const device = findDevice(state, need(args[1], 'device id or name'))
         if (device.deviceId === ownDeviceId(config)) {
@@ -283,7 +287,7 @@ async function main (): Promise<void> {
         await session.removeDevice(device.deviceId)
         return print(`removed device ${label}`, { removed: device })
       }
-      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign | device ignore-manipulation | device flags | device launcher | device remove')
+      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign | device ignore-manipulation | device flags | device launcher | device rename | device remove')
     }
     case 'usage': {
       const owner = child(args[0])
