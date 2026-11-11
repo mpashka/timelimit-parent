@@ -14,6 +14,7 @@ import {
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
 import { ALL_DAYS, APP_ICONS_API_LEVEL, type ParentAction } from '../core/protocol.ts'
+import { setAppAllowance } from '../core/requests.ts'
 import { SyncClient } from '../core/session.ts'
 import { childCategories, parents, type FamilyState } from '../core/state.ts'
 import { formatClock, formatDays, parseClock, parseDays, parseDurationMinutes, parseUntil } from '../shared/time.ts'
@@ -45,6 +46,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   limit set <category> <minutes|off> [--days mo-fr | --week]   --week: one limit for the whole week
   limit app <package> <minutes> [--title T] [--days D]
   app move <package> <category|none>
+  app allowance <package> off           take back the permission for one app given by a parent
   request list [child]                    waiting and today's requests of the child
   request answer <id> app|category <15m|30m|1h|day> [--word W]   allow; day = until Sleep begins
   request deny <id> [--word W]
@@ -341,7 +343,12 @@ async function main (): Promise<void> {
       return apply(session, addChild({ name: args.slice(1).join(' '), timeZone }).actions)
     }
     case 'app': {
-      if (args[0] !== 'move') throw new ParentConsoleError(`unknown app subcommand "${args[0] ?? ''}"`, 'use app move <package> <category|none>')
+      // @tag:app-allowance
+      if (args[0] === 'allowance') {
+        if (args[2] !== 'off') throw new ParentConsoleError(`expected off, got "${args[2] ?? ''}"`, 'use app allowance <package> off')
+        return apply(session, setAppAllowance({ childId: child().id, packageName: need(args[1], 'package'), until: 0 }))
+      }
+      if (args[0] !== 'move') throw new ParentConsoleError(`unknown app subcommand "${args[0] ?? ''}"`, 'use app move <package> <category|none> | app allowance <package> off')
       const owner = child()
       const target = need(args[2], 'category or none')
       return apply(session, moveApp({ state, childId: owner.id, packageName: need(args[1], 'package'), target: target === 'none' ? null : category(target) }))
