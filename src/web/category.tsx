@@ -4,7 +4,7 @@ import { clockAfter, dayLabel, formatDaysRu, formatDuration, shadowedLimitText }
 import { formatClock } from '../shared/time.ts'
 import { useState } from 'preact/hooks'
 import { LABEL_MAX, labelProblem } from '../shared/label.ts'
-import { ExplainedMark, SubmitButton, useApp, useBusy, useScreen } from './ui.tsx'
+import { ExplainedMark, SubmitButton, Switch, useApp, useBusy, useScreen } from './ui.tsx'
 
 // @tag:parent-console @tag:category-limits
 
@@ -20,6 +20,16 @@ export function CategoryDetails () {
       <p class='muted small'><a href='#/'>Сегодня</a> ›</p>
       <article class='card'>
         <CategoryTitle category={category} />
+        {/* @tag:app-hidden */}
+        <Switch on={category.hidden} work={() => ({
+          key: `hide-${category.id}`,
+          intent: 'category-hide',
+          body: { category: category.id, hidden: !category.hidden },
+          done: `«${category.title}»: ${category.hidden ? 'приложения снова видны' : 'приложения скрыты'} у ребёнка`,
+          undo: () => ({ intent: 'category-hide', body: { category: category.id, hidden: category.hidden } })
+        })}>
+          Скрыть у ребёнка<span class='muted small'>все приложения категории и её подкатегорий, пока родитель не вернёт</span>
+        </Switch>
         <h3>Неделя</h3>
         <div class='week'>
           {category.week.map((item) => (

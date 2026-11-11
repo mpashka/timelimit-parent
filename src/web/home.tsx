@@ -134,7 +134,7 @@ function AppMenu ({ app, rule }: { app: { packageName: string, title: string }, 
   const view = useScreen<NowView>()
   const tz = view.child.timeZone
   const allowanceUntil = view.allowances.find((item) => item.packageName === app.packageName)?.until ?? null
-  const current = rule ?? { days: ALL_DAYS, limitMinutes: -1 }
+  const current = rule ?? { days: ALL_DAYS, limitMinutes: -1, hidden: false }
   const closed = current.days === 0
   const allow = (minutes: number) => () => {
     const until = Math.max(now, allowanceUntil ?? 0) + minutes * MINUTE

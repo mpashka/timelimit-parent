@@ -260,6 +260,7 @@ export interface SerializedSetAppRuleAction {
   packageName: string
   days: number
   limitMinutes: number
+  hidden?: boolean
 }
 
 export interface SerializedSetCategoryExtraTimeAction {
@@ -430,6 +431,12 @@ export interface SerializedUpdateDeviceExperimentalFlagsAction {
   value: number
 }
 
+export interface SerializedUpdateDeviceLauncherAction {
+  type: 'UPDATE_DEVICE_LAUNCHER'
+  deviceId: string
+  packageName: string
+}
+
 export interface SerializedUpdateDeviceNameAction {
   type: 'UPDATE_DEVICE_NAME'
   deviceId: string
@@ -499,6 +506,7 @@ export interface ServerAppRule {
   packageName: string
   days: number
   limitMinutes: number
+  hidden: boolean
   usedDay: number
   usedMs: number
 }
@@ -582,6 +590,7 @@ export interface ServerDeviceData {
   pType?: string
   pLevel: number
   exFlags: number
+  launcher: string
 }
 
 export interface ServerDeviceList {
@@ -883,6 +892,7 @@ export type SerializedParentAction =
   | SerializedSetAppAllowanceAction
   | SerializedSetAppRuleAction
   | SerializedUpdateDeviceExperimentalFlagsAction
+  | SerializedUpdateDeviceLauncherAction
   | SerializedUpdateUserLimitLoginCategory
   | SerializedUpdateUserLimitLoginPreBlockDuration
 

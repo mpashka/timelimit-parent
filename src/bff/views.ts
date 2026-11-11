@@ -4,7 +4,7 @@ import { ParentConsoleError } from '../core/errors.ts'
 import { dailyLimitRules } from '../core/operations.ts'
 import { childOverview, findChild, shadowedLimits, usageHistory } from '../core/overview.ts'
 import { parentCode } from '../core/parent-code.ts'
-import { NEW_UI_API_LEVEL, PARENT_SESSION_API_LEVEL, URL_FILTER_API_LEVEL } from '../core/protocol.ts'
+import { CATEGORY_HIDDEN, NEW_UI_API_LEVEL, PARENT_SESSION_API_LEVEL, URL_FILTER_API_LEVEL } from '../core/protocol.ts'
 import { answerCategoryId, requestStatus } from '../core/requests.ts'
 import { defaultScheduleCategories } from '../core/schedules.ts'
 import { childCategories, children, type FamilyState, parents } from '../core/state.ts'
@@ -174,7 +174,7 @@ const viewApps = (context: ViewContext) => {
     return {
       ...appFace(context, packageName),
       weekMs: week.find((item) => item.packageName === packageName)?.ms ?? 0,
-      rule: rule === undefined ? null : { days: rule.days, limitMinutes: rule.limitMinutes },
+      rule: rule === undefined ? null : { days: rule.days, limitMinutes: rule.limitMinutes, hidden: rule.hidden },
       service
     }
   }
@@ -196,6 +196,8 @@ const viewApps = (context: ViewContext) => {
         .sort((a, b) => b.weekMs - a.weekMs)
     })),
     other: week.filter((item) => !assigned.has(item.packageName)).map((item) => row(item.packageName)),
+    // @tag:app-hidden a hidden package drops out of the tablet's app list, so the rules are the only place it is seen
+    hiddenApps: (child.appRules ?? []).filter((rule) => rule.hidden).map((rule) => appFace(context, rule.packageName)),
     appUsageProblem: usageProblem(context),
     serviceProblem: context.launchable !== undefined && 'problem' in context.launchable
       ? context.launchable.problem
@@ -357,6 +359,7 @@ function viewCategory (categoryId: string, context: ViewContext) {
   return {
     id: category.id,
     title: category.base?.title ?? category.id,
+    hidden: ((category.base?.flags ?? 0) & CATEGORY_HIDDEN) !== 0, // @tag:app-hidden
     parentId: category.base?.parentCategoryId || null,
     rules: category.rules,
     shadowedLimits: childId ? shadowedLimits(childCategories(context.state, childId), category.id) : [],

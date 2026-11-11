@@ -58,3 +58,7 @@ export const APP_ICONS_API_LEVEL = 14
 export const LAUNCHABLE_APPS_API_LEVEL = 16
 export { ALL_DAYS } from '../shared/time.ts'
 export const USER_FLAGS_ALL = 1 | 2
+
+/** Category flag: every app of the category is hidden on the child's tablet — protocol-new-ui.md §11. */
+// @tag:app-hidden
+export const CATEGORY_HIDDEN = 2

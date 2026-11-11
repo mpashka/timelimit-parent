@@ -4,6 +4,7 @@ const device = (own: Pick<ServerDevice, 'deviceId' | 'name' | 'model' | 'current
   addedAt: 1757800000000,
   networkTime: 'if possible',
   exFlags: 0,
+  launcher: '',
   cProtectionLevel: 'device owner',
   hProtectionLevel: 'device owner',
   cUsageStats: 'granted',

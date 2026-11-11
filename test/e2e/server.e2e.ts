@@ -288,6 +288,22 @@ test('device flags: each change touches only its own bits', async () => {
   assert.equal(await flags(), 0x400)
 })
 
+// @tag:child-homescreen @tag:app-hidden
+test('device launcher, a hidden app rule and a hidden category come back from the server', async () => {
+  const tablet = (await session.sync()).devices.data.find((d) => d.name === 'Tablet')!
+  assert.equal(tablet.launcher, '')
+  await session.push([{ type: 'UPDATE_DEVICE_LAUNCHER', deviceId: tablet.deviceId, packageName: 'app.lawnchair' }])
+  assert.equal((await session.sync()).devices.data.find((d) => d.deviceId === tablet.deviceId)!.launcher, 'app.lawnchair')
+  const rules = async () => (await session.sync()).users.data.find((user) => user.id === childId)!.appRules
+  await session.push([{ type: 'SET_APP_RULE', userId: childId, packageName: 'com.e2e.hidden', days: 127, limitMinutes: -1, hidden: true }])
+  assert.equal((await rules())?.find((rule) => rule.packageName === 'com.e2e.hidden')?.hidden, true, 'a hidden rule with no days or limit is kept')
+  await session.push([{ type: 'SET_APP_RULE', userId: childId, packageName: 'com.e2e.hidden', days: 127, limitMinutes: -1 }])
+  assert.equal((await rules())?.find((rule) => rule.packageName === 'com.e2e.hidden'), undefined, 'without hidden it is no rule')
+  const category = categoryByTitle(await session.sync(), 'Игры')
+  await session.push([{ type: 'UPDATE_CATEGORY_FLAGS', categoryId: category.id, modified: 2, values: 2 }])
+  assert.equal(((await session.sync({ full: true })).categories[category.id].base!.flags & 2), 2)
+})
+
 // @tag:category-limits
 test('a category title in any language with emoji comes back from the server exactly as typed', async () => {
   const id = categoryByTitle(await session.sync(), 'YouTube').id

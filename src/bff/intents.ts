@@ -7,7 +7,7 @@ import {
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice } from '../core/overview.ts'
 import { answerRequest, setAppAllowance } from '../core/requests.ts'
-import { ALL_DAYS, type ParentAction, type UrlFilter } from '../core/protocol.ts'
+import { ALL_DAYS, CATEGORY_HIDDEN, type ParentAction, type UrlFilter } from '../core/protocol.ts'
 import { type ScheduleBan, setScheduleActions } from '../core/schedules.ts'
 import { childCategories, type FamilyState, parents } from '../core/state.ts'
 import { findDeviceFlag } from '../shared/device-flags.ts'
@@ -214,13 +214,31 @@ const intents: Record<string, (context: IntentContext, body: Body) => ParentActi
     return renameCategory({ category: category(context, body, childId), title })
   },
 
-  // @tag:app-rule
+  // @tag:app-rule @tag:app-hidden
+  // The action sets the whole rule, so a field the body leaves out keeps its current value.
   'app-rule': (context, body) => {
-    const days = num(body, 'days')
-    const limitMinutes = num(body, 'limitMinutes')
+    const target = child(context, body)
+    const packageName = str(body, 'package')
+    const current = target.appRules?.find((rule) => rule.packageName === packageName)
+    const days = optionalNum(body, 'days') ?? current?.days ?? ALL_DAYS
+    const limitMinutes = optionalNum(body, 'limitMinutes') ?? current?.limitMinutes ?? -1
+    const hidden = body.hidden === undefined ? current?.hidden ?? false : bool(body, 'hidden')
     if (!Number.isInteger(days) || days < 0 || days > ALL_DAYS) throw badRequest('days must be a weekday mask')
     if (!Number.isInteger(limitMinutes) || limitMinutes < -1 || limitMinutes > 1440) throw badRequest('limitMinutes must be -1..1440')
-    return [{ type: 'SET_APP_RULE', userId: child(context, body).id, packageName: str(body, 'package'), days, limitMinutes }]
+    return [{ type: 'SET_APP_RULE', userId: target.id, packageName, days, limitMinutes, hidden }]
+  },
+
+  // @tag:child-homescreen
+  'device-launcher': (context, body) => {
+    const packageName = body.package
+    if (typeof packageName !== 'string' || packageName.length > 256) throw badRequest('package must be a string up to 256 chars')
+    return [{ type: 'UPDATE_DEVICE_LAUNCHER', deviceId: findDevice(context.state, str(body, 'device')).deviceId, packageName: packageName.trim() }]
+  },
+
+  // @tag:app-hidden
+  'category-hide': (context, body) => {
+    const { id } = category(context, body, child(context, body).id)
+    return [{ type: 'UPDATE_CATEGORY_FLAGS', categoryId: id, modified: CATEGORY_HIDDEN, values: bool(body, 'hidden') ? CATEGORY_HIDDEN : 0 }]
   },
 
   // @tag:device-flags

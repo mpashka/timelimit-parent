@@ -78,6 +78,35 @@ function DeviceNameForm ({ device, draft, setDraft }: { device: DeviceWithStatus
   )
 }
 
+// @tag:child-homescreen
+/** The home screen package the `launcher` flag pins; empty means none, and the tablet pins TimeLimit's own. */
+function DeviceLauncher ({ device }: { device: DeviceWithStatus }) {
+  const { run } = useApp()
+  const [draft, setDraft] = useState(device.launcher)
+  const [phase, wrap] = useBusy()
+  const packageName = draft.trim()
+  const unchanged = packageName === device.launcher
+  return (
+    <form class='form' onSubmit={(event) => {
+      event.preventDefault()
+      if (unchanged) return
+      void wrap(async () => { await run({
+        key: `launcher-${device.deviceId}`,
+        intent: 'device-launcher',
+        body: { device: device.deviceId, package: packageName },
+        done: packageName ? `${device.name}: рабочий стол ${packageName}` : `${device.name}: рабочий стол не назван`,
+        undo: () => ({ intent: 'device-launcher', body: { device: device.deviceId, package: device.launcher } })
+      }) })
+    }}>
+      <label>Рабочий стол (пакет)
+        <input type='text' maxLength={256} placeholder='не назван' value={draft} onInput={(event) => setDraft(event.currentTarget.value)} />
+      </label>
+      <div class='muted small'>Пусто — не назван. Закрепляется при флаге «Закрепить рабочий стол».</div>
+      <div class='chips'><SubmitButton phase={phase} disabled={unchanged}>Сохранить</SubmitButton></div>
+    </form>
+  )
+}
+
 // @tag:device-flags
 /** Settings that used to need the parent's password on the child's tablet itself. */
 function DeviceFlags ({ device }: { device: DeviceWithStatus }) {
@@ -103,6 +132,7 @@ function DeviceFlags ({ device }: { device: DeviceWithStatus }) {
             </li>
           )
         })}
+        <li><DeviceLauncher device={device} /></li>
       </ul>
     </details></li>
   )

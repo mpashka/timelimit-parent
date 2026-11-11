@@ -1,14 +1,14 @@
 import { type AppCardView, type AppFace, type AppRule, type AppsView, type AppTime, apiBase, type NamedCategory, type NewApp, type WeekApp } from './api.ts'
 import { ALL_DAYS, clockOf, DAY_NAMES, dayLabel, formatDuration, formatUntil } from './format.ts'
 import { useRef, useState } from 'preact/hooks'
-import { ActionButton, useApp, useScreen } from './ui.tsx'
+import { ActionButton, Switch, useApp, useScreen } from './ui.tsx'
 
 // @tag:app-usage @tag:app-rule @tag:new-app
 
 const MINUTE = 60000
 const OWN_LIMITS = [30, 45, 60, 120]
 const WEEKEND = 0b1100000
-const NO_RULE: AppRule = { days: ALL_DAYS, limitMinutes: -1 }
+const NO_RULE: AppRule = { days: ALL_DAYS, limitMinutes: -1, hidden: false }
 
 export const appHref = (packageName: string): string => `#/app/${encodeURIComponent(packageName)}`
 
@@ -89,6 +89,7 @@ export function Apps () {
   const categories = view.categories.map((category) => ({ ...category, apps: category.apps.filter(matches) }))
     .filter((category) => !searching || category.apps.length > 0)
   const other = view.other.filter(matches)
+  const hiddenApps = view.hiddenApps.filter(found)
   const newApps = view.newApps.filter(found)
   const shown = newApps.length + other.length + categories.reduce((sum, category) => sum + category.apps.length, 0)
   return (
@@ -109,11 +110,37 @@ export function Apps () {
       {other.length > 0
         ? <section class='card'><h2>Вне категорий</h2>{other.map((app) => <WeekRow key={app.packageName} app={app} />)}</section>
         : null}
+      {hiddenApps.length > 0
+        ? <section class='card'><h2>Скрыто у ребёнка</h2>{hiddenApps.map((app) => <HiddenRow key={app.packageName} app={app} />)}</section>
+        : null}
       {hidden > 0 && !searching
         ? <p class='muted small'><button type='button' class='link' onClick={() => setAllService(!allService)}>
           {allService ? 'Спрятать служебные' : `Показать служебные (${hidden})`}</button> — без значка на рабочем столе планшета, без времени и без своего правила</p>
         : null}
     </>
+  )
+}
+
+/** A hidden app is in no tablet's app list any more; «Вернуть» keeps its days and limit — the BFF fills them in. */
+// @tag:app-hidden
+function HiddenRow ({ app }: { app: AppFace }) {
+  const { child } = useApp()
+  const show = (hidden: boolean) => () => ({
+    key: `hide-${app.packageName}-${hidden}`,
+    intent: 'app-rule',
+    body: { package: app.packageName, hidden },
+    done: hidden ? `${app.title} скрыто у ${child.name}` : `${app.title} снова видно у ${child.name}`,
+    undo: () => ({ intent: 'app-rule', body: { package: app.packageName, hidden: !hidden } })
+  })
+  return (
+    <div class='app-row'>
+      <AppIcon app={app} />
+      <div class='grow'>
+        <div class='name'><a href={appHref(app.packageName)}>{app.title}</a></div>
+        {app.title !== app.packageName ? <div class='muted small'>{app.packageName}</div> : null}
+      </div>
+      <ActionButton work={show(false)}>Вернуть</ActionButton>
+    </div>
   )
 }
 
@@ -132,10 +159,11 @@ function WeekRow ({ app }: { app: WeekApp & { device?: string | null } }) {
 }
 
 export function ruleText (rule: AppRule): string {
-  if (rule.days === 0) return 'закрыто всегда'
+  const hidden = rule.hidden ? 'скрыто' : '' // @tag:app-hidden
+  if (rule.days === 0) return [hidden, 'закрыто всегда'].filter(Boolean).join(' · ')
   const days = rule.days === ALL_DAYS ? '' : rule.days === WEEKEND ? 'только сб и вс' : `только ${DAY_NAMES.filter((_, i) => (rule.days & (1 << i)) !== 0).join(', ')}`
   const limit = rule.limitMinutes >= 0 ? `свой лимит ${formatDuration(rule.limitMinutes * MINUTE)}` : ''
-  return [days, limit].filter(Boolean).join(' · ')
+  return [hidden, days, limit].filter(Boolean).join(' · ')
 }
 
 export function AppCard () {
@@ -152,7 +180,7 @@ export function AppCard () {
   }
 
   const setRule = (next: AppRule, done: string) => () => ({
-    key: `rule-${next.days}-${next.limitMinutes}`,
+    key: `rule-${next.days}-${next.limitMinutes}-${next.hidden}`,
     intent: 'app-rule',
     body: { package: view.packageName, ...next },
     done,
@@ -243,6 +271,10 @@ export function AppCard () {
           </ActionButton>
         </div>
         {rule.days === 0 ? <p class='muted small'>{view.title} не откроется ни в лимит, ни по просьбе без ответа родителя.</p> : null}
+        {/* @tag:app-hidden */}
+        <Switch on={rule.hidden} work={setRule({ ...rule, hidden: !rule.hidden }, rule.hidden ? `${view.title} снова видно у ${child.name}` : `${view.title} скрыто у ${child.name}`)}>
+          Скрыть у ребёнка<span class='muted small'>приложения не будет нигде на планшете, пока родитель не вернёт</span>
+        </Switch>
       </section>
 
       <section class='card'>

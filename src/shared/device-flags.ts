@@ -12,7 +12,7 @@ export interface DeviceFlag {
 export const DEVICE_FLAGS: DeviceFlag[] = [
   { bit: 0x2, name: 'system-level-blocking', title: 'Замораживать закрытые приложения (закрывает и видео в окошке)', needsDeviceOwner: true },
   { bit: 0x8, name: 'ignore-connection-status', title: 'Не верить системе, что сети нет' },
-  { bit: 0x10, name: 'launcher', title: 'TimeLimit как рабочий стол' },
+  { bit: 0x10, name: 'launcher', title: 'Закрепить рабочий стол (названный на карточке планшета, иначе запасной TimeLimit)', needsDeviceOwner: true },
   { bit: 0x20, name: 'launcher-delay', title: 'Задержка перехода на рабочий стол' },
   { bit: 0x40, name: 'network-time-system', title: 'Время по сети на уровне системы', needsDeviceOwner: true },
   { bit: 0x80, name: 'slow-main-loop', title: 'Реже проверять, что открыто' },

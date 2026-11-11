@@ -13,7 +13,7 @@ import {
   addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, revokeExtraTime, setDailyLimit, setUrlFilter, setWeeklyLimit, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
-import { ALL_DAYS, APP_ICONS_API_LEVEL, type ParentAction } from '../core/protocol.ts'
+import { ALL_DAYS, APP_ICONS_API_LEVEL, CATEGORY_HIDDEN, type ParentAction } from '../core/protocol.ts'
 import { setAppAllowance } from '../core/requests.ts'
 import { SyncClient } from '../core/session.ts'
 import { childCategories, parents, type FamilyState } from '../core/state.ts'
@@ -34,6 +34,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   device assign <device> <user|none>      who uses the device (a child or a parent); "none" frees it again
   device ignore-manipulation <device>     forget the device's past manipulation warnings
   device flags <device> [name=on|off]...  experimental flags of the device; without changes lists them
+  device launcher <device> [<package>|-]  home screen the launcher flag pins; - clears it, no argument prints it
   device remove <device>                  remove the device from the family; its app loses the connection
   status [child]                          time used/left, bans, loopholes
   usage [child] [--days N]                used time per category per day
@@ -47,10 +48,12 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   limit app <package> <minutes> [--title T] [--days D]
   app move <package> <category|none>
   app allowance <package> off           take back the permission for one app given by a parent
+  app hide <package> [off]                hide the app on the child's tablets; off shows it again
   request list [child]                    waiting and today's requests of the child
   request answer <id> app|category <15m|30m|1h|day> [--word W]   allow; day = until Sleep begins
   request deny <id> [--word W]
   category rename <category> <new title>  the parent's own words, any language and emoji
+  category hide <category> [off]          hide all apps of the category and its subcategories; off shows them again
   child add <name> [--time-zone TZ]       a new child with the default categories
   child remove <name>                     remove the child with its categories, rules and used time
   child relax <name> on|off               limited apps work on every device of the child, not only the current one
@@ -97,6 +100,13 @@ const { values: options, positionals } = parseArgs({
 
 const print = (human: string, json: unknown) => console.log(options.json ? JSON.stringify(json, null, 2) : human)
 const list = (value: string | undefined): string[] => (value ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+
+/** No argument switches it on, "off" switches it off. */
+function onOrOff (value: string | undefined, use: string): boolean {
+  if (value === undefined) return true
+  if (value === 'off') return false
+  throw new ParentConsoleError(`expected off or nothing, got "${value}"`, `use ${use}`)
+}
 
 function need (value: string | undefined, what: string): string {
   if (!value) throw new ParentConsoleError(`missing ${what}`, 'see `timelimit-parent --help`')
@@ -257,6 +267,12 @@ async function main (): Promise<void> {
         const value = changes.reduce((bits, { flag, on }) => on ? bits | flag.bit : bits, 0)
         return apply(session, [{ type: 'UPDATE_DEVICE_EXPERIMENTAL_FLAGS', deviceId: device.deviceId, mask, value }])
       }
+      // @tag:child-homescreen
+      if (args[0] === 'launcher') {
+        const device = findDevice(state, need(args[1], 'device id or name'))
+        if (args[2] === undefined) return print(`${device.name} (${device.deviceId}): ${device.launcher || 'not named'}`, { deviceId: device.deviceId, launcher: device.launcher })
+        return apply(session, [{ type: 'UPDATE_DEVICE_LAUNCHER', deviceId: device.deviceId, packageName: args[2] === '-' ? '' : args[2] }])
+      }
       if (args[0] === 'remove') {
         const device = findDevice(state, need(args[1], 'device id or name'))
         if (device.deviceId === ownDeviceId(config)) {
@@ -267,7 +283,7 @@ async function main (): Promise<void> {
         await session.removeDevice(device.deviceId)
         return print(`removed device ${label}`, { removed: device })
       }
-      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign | device ignore-manipulation | device flags | device remove')
+      throw new ParentConsoleError(`unknown device subcommand "${args[0] ?? ''}"`, 'use device list | device add | device assign | device ignore-manipulation | device flags | device launcher | device remove')
     }
     case 'usage': {
       const owner = child(args[0])
@@ -327,7 +343,12 @@ async function main (): Promise<void> {
       return apply(session, requestAnswerActions({ state, args, word: options.word, now }))
     }
     case 'category': {
-      if (args[0] !== 'rename') throw new ParentConsoleError(`unknown category subcommand "${args[0] ?? ''}"`, 'use category rename <category> <new title>')
+      // @tag:app-hidden
+      if (args[0] === 'hide') {
+        const hidden = onOrOff(args[2], 'category hide <category> [off]')
+        return apply(session, [{ type: 'UPDATE_CATEGORY_FLAGS', categoryId: category(need(args[1], 'category')).id, modified: CATEGORY_HIDDEN, values: hidden ? CATEGORY_HIDDEN : 0 }])
+      }
+      if (args[0] !== 'rename') throw new ParentConsoleError(`unknown category subcommand "${args[0] ?? ''}"`, 'use category rename <category> <new title> | category hide <category> [off]')
       return apply(session, renameCategory({ category: category(need(args[1], 'category')), title: args.slice(2).join(' ') }))
     }
     case 'child': {
@@ -348,7 +369,15 @@ async function main (): Promise<void> {
         if (args[2] !== 'off') throw new ParentConsoleError(`expected off, got "${args[2] ?? ''}"`, 'use app allowance <package> off')
         return apply(session, setAppAllowance({ childId: child().id, packageName: need(args[1], 'package'), until: 0 }))
       }
-      if (args[0] !== 'move') throw new ParentConsoleError(`unknown app subcommand "${args[0] ?? ''}"`, 'use app move <package> <category|none> | app allowance <package> off')
+      // @tag:app-hidden
+      if (args[0] === 'hide') {
+        const hidden = onOrOff(args[2], 'app hide <package> [off]')
+        const owner = child()
+        const packageName = need(args[1], 'package')
+        const rule = owner.appRules?.find((item) => item.packageName === packageName)
+        return apply(session, [{ type: 'SET_APP_RULE', userId: owner.id, packageName, days: rule?.days ?? ALL_DAYS, limitMinutes: rule?.limitMinutes ?? -1, hidden }])
+      }
+      if (args[0] !== 'move') throw new ParentConsoleError(`unknown app subcommand "${args[0] ?? ''}"`, 'use app move <package> <category|none> | app allowance <package> off | app hide <package> [off]')
       const owner = child()
       const target = need(args[2], 'category or none')
       return apply(session, moveApp({ state, childId: owner.id, packageName: need(args[1], 'package'), target: target === 'none' ? null : category(target) }))

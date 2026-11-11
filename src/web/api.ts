@@ -28,6 +28,7 @@ export interface Device {
   model: string
   currentUserId: string
   exFlags: number // @tag:device-flags
+  launcher: string // @tag:child-homescreen
   cProtectionLevel: string
 }
 
@@ -88,7 +89,7 @@ export interface DeviceStatus { online: boolean, seen: number | null, app: strin
 export interface DeviceWithStatus extends Device { status: DeviceStatus }
 export interface AppTime extends AppFace { ms: number, byDevice: Record<string, number>, category: NamedCategory | null }
 export interface NewApp extends AppFace { section: string, installedAt: number, deviceId: string, device: string, guess: string | null }
-export interface AppRule { days: number, limitMinutes: number }
+export interface AppRule { days: number, limitMinutes: number, hidden: boolean } // @tag:app-hidden
 
 /** `service` — no icon on the home screen of the child's tablets (the one named in `device`, if any). */
 export interface WeekApp extends AppFace { weekMs: number, rule: AppRule | null, service: boolean }
@@ -98,6 +99,7 @@ export interface AppsView {
   newApps: NewApp[]
   categories: Array<NamedCategory & { apps: Array<WeekApp & { device: string | null }> }>
   other: WeekApp[]
+  hiddenApps: AppFace[] // @tag:app-hidden
   appUsageProblem: string | null
   serviceProblem: string | null
 }
@@ -182,6 +184,7 @@ export interface SitesView {
 export interface CategoryView {
   id: string
   title: string
+  hidden: boolean // @tag:app-hidden
   rules: Rule[]
   shadowedLimits: ShadowedLimit[]
   apps: AppFace[]

@@ -166,3 +166,15 @@ test('apps view: a tablet without icon reports marks nothing service and is name
   assert.equal(dialer(both).service, true)
   assert.equal(both.serviceProblem, null)
 })
+
+// @tag:app-hidden
+test('an app rule keeps the hidden mark when days change, and keeps days when it is hidden', () => {
+  const state = fixtureState()
+  const child = state.users.data.find((user) => user.id === 'child1')!
+  child.appRules = [{ packageName: 'com.game', days: 96, limitMinutes: 30, hidden: true, usedDay: 0, usedMs: 0 }]
+  const context = { state, now: 0 }
+  assert.deepEqual(buildIntent('app-rule', context, { child: 'child1', package: 'com.game', days: 0, limitMinutes: 30 }),
+    [{ type: 'SET_APP_RULE', userId: 'child1', packageName: 'com.game', days: 0, limitMinutes: 30, hidden: true }])
+  assert.deepEqual(buildIntent('app-rule', context, { child: 'child1', package: 'com.game', hidden: false }),
+    [{ type: 'SET_APP_RULE', userId: 'child1', packageName: 'com.game', days: 96, limitMinutes: 30, hidden: false }])
+})

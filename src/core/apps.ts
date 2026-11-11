@@ -165,7 +165,7 @@ export function appCard (state: FamilyState, childId: string, packageName: strin
     todayMs: days?.find((item) => item.day === toDay)?.ms ?? null,
     averageMs: days === null ? null : Math.round(days.reduce((sum, item) => sum + item.ms, 0) / USAGE_DAYS),
     devices,
-    rule: rule === null ? null : { days: rule.days, limitMinutes: rule.limitMinutes },
+    rule: rule === null ? null : { days: rule.days, limitMinutes: rule.limitMinutes, hidden: rule.hidden },
     allowanceUntil: allowance?.until ?? null
   }
 }
