@@ -10,7 +10,7 @@ import { exportChild, overlayConfigs, planImport, type PortableConfig } from '..
 import { ParentConsoleError } from '../core/errors.ts'
 import { DEVICE_FLAGS, findDeviceFlag, isFlagIneffective, NOT_DEVICE_OWNER } from '../shared/device-flags.ts'
 import {
-  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, setDailyLimit, setUrlFilter, setWeeklyLimit, unlockChild
+  addChild, allowCategoryUntil, allowChildUntil, grantExtraTime, limitApp, lockChild, moveApp, renameCategory, revokeExtraTime, setDailyLimit, setUrlFilter, setWeeklyLimit, unlockChild
 } from '../core/operations.ts'
 import { childOverview, findCategory, findChild, findDevice, usageHistory } from '../core/overview.ts'
 import { ALL_DAYS, APP_ICONS_API_LEVEL, type ParentAction } from '../core/protocol.ts'
@@ -36,7 +36,7 @@ usage: timelimit-parent <command> [args] [--json] [--server URL] [--dry-run]
   device remove <device>                  remove the device from the family; its app loses the connection
   status [child]                          time used/left, bans, loopholes
   usage [child] [--days N]                used time per category per day
-  grant <category> <minutes>              extra time for today
+  grant <category> <minutes>|off         extra time for today; off takes today's extra time away
   allow <category>|--all <duration|HH:MM|off>   switch limits off for a while
   lock [child] [--until DUR|HH:MM] [--off]      block all root categories now
   ban list [child]
@@ -273,8 +273,11 @@ async function main (): Promise<void> {
       const rows = history.days.map((d) => [d.date, ...history.categories.map((c) => hours(d.byCategory[c.id] ?? 0))])
       return print(table(['day', ...history.categories.map((c) => c.title)], rows), history)
     }
-    case 'grant':
-      return apply(session, grantExtraTime({ state, category: category(args[0]), minutes: parseDurationMinutes(need(args[1], 'minutes')), now }))
+    case 'grant': {
+      const amount = need(args[1], 'minutes or off')
+      if (amount === 'off') return apply(session, revokeExtraTime({ state, category: category(args[0]), minutes: Number.MAX_SAFE_INTEGER / 60000, now }))
+      return apply(session, grantExtraTime({ state, category: category(args[0]), minutes: parseDurationMinutes(amount), now }))
+    }
     case 'allow': {
       const owner = child()
       const value = need(options.all ? args[0] : args[1], 'duration, HH:MM or off')
